@@ -1,7 +1,5 @@
 ﻿
-using System.Linq.Expressions;
 using System.Numerics;
-using System.Runtime.Serialization;
 using Raylib_cs;
 
 static class RaylibHelper
@@ -10,16 +8,21 @@ static class RaylibHelper
     {
         return Raylib.IsKeyPressed(key) || Raylib.IsKeyPressedRepeat(key);
     }
+
+    public static Rectangle Expand(this Rectangle rect, float radius)
+    {
+        return new Rectangle(rect.X - radius, rect.Y - radius, rect.Width + radius * 2, rect.Height + radius * 2);
+    }
 }
 
 interface IDisplay
 {
-    void Display(DisplayNodeTree displayNodeTree, Node node);
+    void Display(NodeTree displayNodeTree, Node node);
 }
 
 class DisplayParameters(Color punctuationColor) : IDisplay
 {
-    public void Display(DisplayNodeTree displayNodeTree, Node node)
+    public void Display(NodeTree displayNodeTree, Node node)
     {
         displayNodeTree.DrawText("(", punctuationColor);
         for (var i = 0; i < node.children.Count; i++)
@@ -37,7 +40,7 @@ class DisplayParameters(Color punctuationColor) : IDisplay
 
 class DisplayChildX(int x) : IDisplay
 {
-    public void Display(DisplayNodeTree displayNodeTree, Node node)
+    public void Display(NodeTree displayNodeTree, Node node)
     {
         displayNodeTree.Draw(node.children[x]);
     }
@@ -45,7 +48,7 @@ class DisplayChildX(int x) : IDisplay
 
 class DisplayValue(Color color) : IDisplay
 {
-    public void Display(DisplayNodeTree displayNodeTree, Node node)
+    public void Display(NodeTree displayNodeTree, Node node)
     {
         displayNodeTree.DrawText(node.value!, color);
     }
@@ -53,7 +56,7 @@ class DisplayValue(Color color) : IDisplay
 
 class DisplayNewLine : IDisplay
 {
-    public void Display(DisplayNodeTree displayNodeTree, Node node)
+    public void Display(NodeTree displayNodeTree, Node node)
     {
         displayNodeTree.NewLine();
     }
@@ -61,7 +64,7 @@ class DisplayNewLine : IDisplay
 
 class DisplaySpace : IDisplay
 {
-    public void Display(DisplayNodeTree displayNodeTree, Node node)
+    public void Display(NodeTree displayNodeTree, Node node)
     {
         displayNodeTree.DrawSpace();
     }
@@ -69,7 +72,7 @@ class DisplaySpace : IDisplay
 
 class DisplayType(Color color) : IDisplay
 {
-    public void Display(DisplayNodeTree displayNodeTree, Node node)
+    public void Display(NodeTree displayNodeTree, Node node)
     {
         displayNodeTree.DrawText(node.nodeType.name, color);
     }
@@ -77,7 +80,7 @@ class DisplayType(Color color) : IDisplay
 
 class DisplayChildren : IDisplay
 {
-    public void Display(DisplayNodeTree displayNodeTree, Node node)
+    public void Display(NodeTree displayNodeTree, Node node)
     {
         displayNodeTree.DrawChildren(node);
     }
@@ -85,7 +88,7 @@ class DisplayChildren : IDisplay
 
 class DisplayChildrenOfChild(int childID) : IDisplay
 {
-    public void Display(DisplayNodeTree displayNodeTree, Node node)
+    public void Display(NodeTree displayNodeTree, Node node)
     {
         displayNodeTree.DrawChildren(node.children[childID]);
     }
@@ -145,21 +148,14 @@ class MenuItem
     }
 }
 
-class DisplayNodeTree
+class NodeTree : GUI
 {
+    Node root;
     int x;
     int y;
     int depth;
     int fontSize = 50;
     int spaceSize;
-
-    public void Reset()
-    {
-        x = 0;
-        y = 0;
-        depth = 0;
-        spaceSize = Raylib.MeasureText(" ", fontSize);
-    }
 
     public void DrawText(string text, Color color)
     {
@@ -190,32 +186,34 @@ class DisplayNodeTree
         depth--;
     }
 
-    static Action CreateForm(Vector2 pos, int fontSize, Node node, NodeType nodeType)
+    static Action CreateForm(GUI parent, Menu menu, Vector2 pos, int fontSize, Node node, NodeType nodeType)
     {
         return () =>
         {
-            var textBox = new TextBox(new Rectangle(pos.X, pos.Y, 600, fontSize), fontSize);
+            var rect = new Rectangle(pos.X, pos.Y, 600, fontSize);
+            var form = new Form(parent, rect.Expand(50));
+            var textBox = new TextBox(form, rect, fontSize);
             textBox.onEnter = () =>
             {
                 var newNode = new Node(node, nodeType, textBox.text);
                 if (nodeType.defaultTypes != null)
                 {
-                    foreach(var n in nodeType.defaultTypes.types)
+                    foreach (var n in nodeType.defaultTypes.types)
                     {
                         newNode.children.Add(new Node(newNode, n, "void"));
                     }
                 }
                 node.children.Add(newNode);
-                Program.gui = null;
+                form.parent!.children.Remove(form);
             };
-            Program.gui = textBox;
+            menu.parent!.children.Remove(menu);
         };
     }
 
-    static void CreateAddMenuItems(Menu menu, Vector2 pos, int fontSize, Node node)
+    static void CreateAddMenuItems(GUI parent, Menu menu, Vector2 pos, int fontSize, Node node)
     {
         var addNodeMenuItem = node.nodeType.subTypes
-            .Select(t => new MenuItem($"Add {t.name}", CreateForm(pos, fontSize, node, t)))
+            .Select(t => new MenuItem($"Add {t.name}", CreateForm(parent, menu, pos, fontSize, node, t)))
             .ToArray();
         menu.menuItems.AddRange(addNodeMenuItem);
         
@@ -231,53 +229,92 @@ class DisplayNodeTree
         var m = Raylib.GetMousePosition();
         if (m.Y > startY && m.Y < startY + fontSize && Raylib.IsMouseButtonPressed(MouseButton.Left))
         {
-            var menu = new Menu(m, 400, fontSize);
+            var menu = new Menu(parent!, m, 400, fontSize);
             if (node.nodeType.defaultTypes == null)
             {
-                CreateAddMenuItems(menu, m, fontSize, node);
+                CreateAddMenuItems(parent!, menu, m, fontSize, node);
             }
             else if (node.nodeType.defaultTypes.id >= 0)
             {
-                CreateAddMenuItems(menu, m, fontSize, node.children[node.nodeType.defaultTypes.id]);
+                CreateAddMenuItems(parent!, menu, m, fontSize, node.children[node.nodeType.defaultTypes.id]);
             }
             if (node.nodeType.hasValue)
-        {
-            menu.menuItems.Add(new MenuItem("Rename", () =>
             {
-                var textBox = new TextBox(new Rectangle(m.X, m.Y, 600, fontSize), fontSize);
-                textBox.onEnter = () =>
+                menu.menuItems.Add(new MenuItem("Rename", () =>
                 {
-                    node.value = textBox.text;
-                    Program.gui = null;
-                };
-                Program.gui = textBox;
-            }));
-        }
-        if (node.parent != null)
-        {
-            menu.menuItems.Add(new MenuItem("Delete", () =>
+                    var rect = new Rectangle(m.X, m.Y, 600, fontSize);
+                    var form = new Form(parent, rect.Expand(50));
+                    var textBox = new TextBox(form, rect, fontSize);
+                    textBox.onEnter = () =>
+                    {
+                        node.value = textBox.text;
+                        form.parent!.children.Remove(form);
+                    };
+                }));
+            }
+            if (node.parent != null)
             {
-                node.parent.children.Remove(node);
-                Program.gui = null;
-            }));
+                menu.menuItems.Add(new MenuItem("Delete", () =>
+                {
+                    node.parent.children.Remove(node);
+                    menu.parent!.children.Remove(menu);
+                }));
+            }
         }
-        Program.gui = menu;
-        }
+    }
+
+    public NodeTree(GUI parent, Node root)
+    {
+        this.parent = parent;
+        parent.children.Add(this);
+        this.root = root;
+    }
+
+    public override void Update()
+    {
+        x = 0;
+        y = 0;
+        depth = 0;
+        spaceSize = Raylib.MeasureText(" ", fontSize);
+        Draw(root);
     }
 }
 
+class Form : GUI
+{
+    Rectangle rect;
+
+    public Form(GUI? parent, Rectangle rect)
+    {
+        this.parent = parent;
+        if (parent != null)
+        {
+            parent.children.Add(this);
+        }
+        this.rect = rect;
+    }
+
+    public override void Update()
+    {
+        Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.White);
+        for (var i = 0; i < children.Count; i++)
+        {
+            children[i].Update();
+        }
+        Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
+    }
+}
+
+
 class Program
 {
-    public static IGUI? gui;
-
     static void Main()
     {
         Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
-        Raylib.InitWindow(1000, 800, "IDE");
+        Raylib.InitWindow(1000, 800, "ASTEditor");
         Raylib.MaximizeWindow();
 
-        var displayNodeTree = new DisplayNodeTree();
-
+        var form = new Form(null, new Rectangle(0,0,1000, 800));
         var exprType = new NodeType("expression", true);
         var typeType = new NodeType("type", true);
         var nameType = new NodeType("name", true);
@@ -327,18 +364,15 @@ class Program
             new DisplayChildrenOfChild(2),
         ]);
         var root = new Node(null, rootType, null);
+        new NodeTree(form, root);
 
         while (!Raylib.WindowShouldClose())
         {
             Raylib.BeginDrawing();
             Raylib.ClearBackground(Color.White);
 
-            displayNodeTree.Reset();
-            displayNodeTree.Draw(root);
-            if (gui != null)
-            {
-                gui.Update();
-            }
+            form.Update();
+
             Raylib.EndDrawing();
         }
         Raylib.CloseWindow();

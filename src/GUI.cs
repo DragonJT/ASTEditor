@@ -1,12 +1,14 @@
 using System.Numerics;
 using Raylib_cs;
 
-interface IGUI
+abstract class GUI
 {
-    void Update();
+    public GUI? parent;
+    public List<GUI> children = [];
+    public abstract void Update();
 }
 
-class Menu : IGUI
+class Menu : GUI
 {
     Vector2 position;
     float width;
@@ -14,14 +16,16 @@ class Menu : IGUI
     public List<MenuItem> menuItems = [];
     int index = 0;
 
-    public Menu(Vector2 position, float width, int fontSize)
+    public Menu(GUI parent, Vector2 position, float width, int fontSize)
     {
+        this.parent = parent;
+        parent.children.Add(this);
         this.position = position;
         this.width = width;
         this.fontSize = fontSize;
     }
 
-    public void Update()
+    public override void Update()
     {
         float height = fontSize * menuItems.Count;
         var rect = new Rectangle(position.X, position.Y, width, height);
@@ -53,20 +57,22 @@ class Menu : IGUI
     }
 }
 
-class TextBox : IGUI
+class TextBox : GUI
 {
     int fontSize;
     Rectangle rect;
     public string text = "";
     public Action? onEnter;
 
-    public TextBox(Rectangle rect, int fontSize)
+    public TextBox(GUI parent, Rectangle rect, int fontSize)
     {
+        this.parent = parent;
+        parent.children.Add(this);
         this.rect = rect;
         this.fontSize = fontSize;
     }
 
-    public void Update()
+    public override void Update()
     {
         int key = Raylib.GetCharPressed();
         while (key > 0)
