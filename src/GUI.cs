@@ -1,4 +1,6 @@
 
+using System.Numerics;
+using System.Reflection;
 using Raylib_cs;
 
 class Window
@@ -15,6 +17,8 @@ class Window
     const int spacing = 5;
     const int border = 20;
     const float labelFraction = 0.4f;
+
+    public float Y => y;
 
     public Window(Window? parent, Rectangle rect, int fontSize)
     {
@@ -47,10 +51,10 @@ class Window
         Add(new Label(this, new Rectangle(rect.X + border, y, rect.Width * 0.3f, fontSize), text, fontSize, Color.Black));
     }
 
-    public TextBox AddTextBox()
+    public TextBox AddTextBox(ValueGetSetter valueGetSetter)
     {
         var r = new Rectangle(rect.X + rect.Width * labelFraction, y, rect.Width * (1 - labelFraction) - border, fontSize);
-        var textBox = new TextBox(this, r, fontSize);
+        var textBox = new TextBox(this, r, fontSize, valueGetSetter);
         y += fontSize + spacing;
         Add(textBox);
         return textBox;
@@ -142,16 +146,19 @@ abstract class GUI(Window window, Rectangle rect, bool isSelectable)
 class TextBox : GUI
 {
     int fontSize;
+    ValueGetSetter valueGetSetter;
     public string text = "";
     public Action? onEnter;
 
-    public TextBox(Window window, Rectangle rect, int fontSize) : base(window, rect, true)
+    public TextBox(Window window, Rectangle rect, int fontSize, ValueGetSetter valueGetSetter) : base(window, rect, true)
     {
         this.fontSize = fontSize;
+        this.valueGetSetter = valueGetSetter;
     }
 
     public override void Update()
     {
+        text = valueGetSetter.GetString();
         Color border = Color.Black;
         if (Active)
         {
@@ -159,7 +166,10 @@ class TextBox : GUI
             while (key > 0)
             {
                 if ((key >= 32) && (key <= 125))
+                {
                     text += (char)key;
+                    valueGetSetter.SetString(text);
+                }
 
                 key = Raylib.GetCharPressed();
             }
@@ -167,6 +177,7 @@ class TextBox : GUI
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
             {
                 text = text[..^1];
+                valueGetSetter.SetString(text);
             }
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
             {

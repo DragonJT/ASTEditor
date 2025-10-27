@@ -1,5 +1,6 @@
 ﻿
 using System.Numerics;
+using System.Reflection;
 using Raylib_cs;
 
 static class RaylibHelper
@@ -109,11 +110,13 @@ class DefaultTypes
 
 class NodeType
 {
-    public string name;
-    public bool hasValue;
+    public string name = "";
+    public bool hasValue = false;
     public DefaultTypes? defaultTypes;
     public List<NodeType> subTypes = [];
     public List<IDisplay> display = [];
+
+    public NodeType() { }
 
     public NodeType(string name, bool hasValue)
     {
@@ -127,15 +130,14 @@ class NodeType
 class Node
 {
     public NodeType nodeType;
-    public string? value;
+    public string value = "";
     public Node? parent = null;
     public List<Node> children = [];
 
-    public Node(Node? parent, NodeType nodeType, string? value)
+    public Node(Node? parent, NodeType nodeType)
     {
         this.parent = parent;
         this.nodeType = nodeType;
-        this.value = value;
     }
 }
 
@@ -195,18 +197,20 @@ class NodeTree : GUI
                 var form = new Window(parent, rect.Expand(50), fontSize);
                 form.AddHeader(nodeType.name, 1.3f);
                 form.AddLabel("Name");
-                var textBox = form.AddTextBox();
+
+                var newNode = new Node(node, nodeType);
+                node.children.Add(newNode);
+                if (nodeType.defaultTypes != null)
+                {
+                    foreach (var n in nodeType.defaultTypes.types)
+                    {
+                        newNode.children.Add(new Node(newNode, n));
+                    }
+                }
+                
+                var textBox = form.AddTextBox(new ValueGetSetter(newNode, "value"));
                 textBox.onEnter = () =>
                 {
-                    var newNode = new Node(node, nodeType, textBox.text);
-                    if (nodeType.defaultTypes != null)
-                    {
-                        foreach (var n in nodeType.defaultTypes.types)
-                        {
-                            newNode.children.Add(new Node(newNode, n, "void"));
-                        }
-                    }
-                    node.children.Add(newNode);
                     form.Delete();
                 };
             };
@@ -215,7 +219,7 @@ class NodeTree : GUI
         {
             return () =>
             {
-                var newNode = new Node(node, nodeType, null);
+                var newNode = new Node(node, nodeType);
                 node.children.Add(newNode);
                 parent.child = null;
             };
@@ -244,7 +248,7 @@ class NodeTree : GUI
         var m = new Vector2(100, startY + fontSize);
         if (Active && selected == node && RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
         {
-            var menu = new Window(window, new Rectangle(m, 400, 0), fontSize);
+            var menu = new Window(window, new Rectangle(m, World.menuWidth, 0), fontSize);
             if (node.nodeType.defaultTypes == null)
             {
                 CreateAddMenuItems(window, menu, m, fontSize, node);
@@ -261,10 +265,9 @@ class NodeTree : GUI
                     var form = new Window(window, rect, fontSize);
                     form.AddHeader("Rename", 1.3f);
                     form.AddLabel("New name");
-                    var textBox = form.AddTextBox();
+                    var textBox = form.AddTextBox(new ValueGetSetter(node, "value"));
                     textBox.onEnter = () =>
                     {
-                        node.value = textBox.text;
                         form.Delete();
                     };
                 });
@@ -305,21 +308,6 @@ class NodeTree : GUI
         Draw(root);
         if (Active)
         {
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.E))
-            {
-                /*public string name;
-    public bool hasValue;
-    public DefaultTypes? defaultTypes;
-    public List<NodeType> subTypes = [];
-    public List<IDisplay> display = [];*/
-
-                var form = new Window(window, new Rectangle(0, 0, 1000, 800), fontSize);
-                form.AddHeader("Edit", 1.3f);
-                form.AddLabel("Name");
-                form.AddTextBox();
-                form.AddLabel("hasValue");
-                form.AddBoolBox(false);
-            }
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
             {
                 var nodes = GetDescendingNodes(root).Where(n => n.nodeType.IsNewLineInTree).ToList();
@@ -347,17 +335,66 @@ class NodeTree : GUI
     }
 }
 
-class Program
+class ValueGetSetter
 {
-    
-    static void Main()
-    {
-        const int fontSize = 50;
-        Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
-        Raylib.InitWindow(1000, 800, "ASTEditor");
-        Raylib.MaximizeWindow();
+    object obj;
+    FieldInfo fieldInfo;
 
-        var form = new Window(null, new Rectangle(0,0,1000, 800), fontSize);
+    public ValueGetSetter(object obj, string fieldName)
+    {
+        this.obj = obj;
+        fieldInfo = obj.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) 
+            ?? throw new Exception(obj+"_"+fieldName);
+    }
+
+    public string GetString()
+    {
+        return (string)fieldInfo.GetValue(obj)!;
+    }
+
+    public void SetString(string value)
+    {
+        fieldInfo.SetValue(obj, value);
+    }
+}
+
+class World
+{
+    public const int menuWidth = 400;
+    public const int fontSize = 50;
+    public List<NodeType> nodeTypes = [];
+    public Node root;
+
+    public void Edit(Window parent)
+    {
+        /*public string name;
+        public bool hasValue;
+        public DefaultTypes? defaultTypes;
+        public List<NodeType> subTypes = [];
+        public List<IDisplay> display = [];*/
+
+        var form = new Window(parent, new Rectangle(0, 0, 1000, 800), fontSize);
+        var nodeType = new NodeType();
+        nodeTypes.Add(nodeType);
+        form.AddHeader("Edit", 1.3f);
+        form.AddLabel("Name");
+        form.AddTextBox(new ValueGetSetter(nodeType, "name"));
+        form.AddLabel("HasValue");
+        form.AddBoolBox(false);
+        var y = form.Y;
+        form.AddButton("Add", () =>
+        {
+            var menu = new Window(form, new Rectangle(200, y, menuWidth, 0), fontSize);
+            menu.AddButton("[new]", () => Edit(parent));
+            foreach (var t in nodeTypes)
+            {
+                menu.AddButton(t.name, () => { });
+            }
+        });
+    }
+
+    public World()
+    {
         var exprType = new NodeType("expression", false);
         var typeType = new NodeType("type", true);
         var nameType = new NodeType("name", true);
@@ -408,14 +445,31 @@ class Program
             new DisplayNewLine(),
             new DisplayChildrenOfChild(2),
         ]);
-        var root = new Node(null, rootType, null);
-        form.AddNodeTree(root);
+        root = new Node(null, rootType);
+    }
+}
+
+class Program
+{
+    static void Main()
+    {
+        Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
+        Raylib.InitWindow(1000, 800, "ASTEditor");
+        Raylib.MaximizeWindow();
+
+        var form = new Window(null, new Rectangle(0, 0, 1000, 800), World.fontSize);
+        var world = new World();
+        form.AddNodeTree(world.root);
 
         while (!Raylib.WindowShouldClose())
         {
             Raylib.BeginDrawing();
             Raylib.ClearBackground(Color.White);
 
+            if(form.Active && RaylibHelper.IsKeyPressed(KeyboardKey.E))
+            {
+                world.Edit(form);
+            }
             form.Update();
 
             Raylib.EndDrawing();
