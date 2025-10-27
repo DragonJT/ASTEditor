@@ -1,14 +1,38 @@
 using System.Numerics;
 using Raylib_cs;
 
-abstract class GUI
+abstract class GUIWindow
 {
-    public GUI? parent;
-    public List<GUI> children = [];
+    public bool startFrame = true;
+    public GUIWindow? parent;
+    public GUIWindow? child;
     public abstract void Update();
+
+    public void SetParent(GUIWindow? parent)
+    {
+        if(parent != null)
+        {
+            this.parent = parent;
+            parent.child = this;
+        }
+    }
+
+    public void Delete()
+    {
+        parent!.child = null;
+    }
+
+    public bool Active => child == null && !startFrame;
 }
 
-class Menu : GUI
+abstract class GUI(GUIWindow guiWindow)
+{
+    public readonly GUIWindow guiWindow = guiWindow;
+    public abstract void Update();
+    public bool Active => guiWindow.Active;
+}
+
+class Menu : GUIWindow
 {
     Vector2 position;
     float width;
@@ -16,10 +40,9 @@ class Menu : GUI
     public List<MenuItem> menuItems = [];
     int index = 0;
 
-    public Menu(GUI parent, Vector2 position, float width, int fontSize)
+    public Menu(GUIWindow? parent, Vector2 position, float width, int fontSize)
     {
-        this.parent = parent;
-        parent.children.Add(this);
+        SetParent(parent);
         this.position = position;
         this.width = width;
         this.fontSize = fontSize;
@@ -29,19 +52,22 @@ class Menu : GUI
     {
         float height = fontSize * menuItems.Count;
         var rect = new Rectangle(position.X, position.Y, width, height);
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
+        if (Active)
         {
-            index--;
-            if (index < 0) index = menuItems.Count - 1;
-        }
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
-        {
-            index++;
-            if (index >= menuItems.Count) index = 0;
-        }
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
-        {
-            menuItems[index].action();
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
+            {
+                index--;
+                if (index < 0) index = menuItems.Count - 1;
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
+            {
+                index++;
+                if (index >= menuItems.Count) index = 0;
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
+            {
+                menuItems[index].action();
+            }
         }
         Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.White);
         for (var i = 0; i < menuItems.Count; i++)
@@ -54,6 +80,7 @@ class Menu : GUI
             Raylib.DrawText(menuItems[i].name, (int)rect.X, (int)(rect.Y + i * fontSize), fontSize, Color.Black);
         }
         Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
+        startFrame = false;
     }
 }
 
@@ -64,32 +91,33 @@ class TextBox : GUI
     public string text = "";
     public Action? onEnter;
 
-    public TextBox(GUI parent, Rectangle rect, int fontSize)
+    public TextBox(GUIWindow guiWindow, Rectangle rect, int fontSize) : base(guiWindow)
     {
-        this.parent = parent;
-        parent.children.Add(this);
         this.rect = rect;
         this.fontSize = fontSize;
     }
 
     public override void Update()
     {
-        int key = Raylib.GetCharPressed();
-        while (key > 0)
+        if (Active)
         {
-            if ((key >= 32) && (key <= 125))
-                text += (char)key;
+            int key = Raylib.GetCharPressed();
+            while (key > 0)
+            {
+                if ((key >= 32) && (key <= 125))
+                    text += (char)key;
 
-            key = Raylib.GetCharPressed();
-        }
+                key = Raylib.GetCharPressed();
+            }
 
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
-        {
-            text = text[..^1];
-        }
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
-        {
-            onEnter?.Invoke();
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
+            {
+                text = text[..^1];
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
+            {
+                onEnter?.Invoke();
+            }
         }
         Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.RayWhite);
         Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
