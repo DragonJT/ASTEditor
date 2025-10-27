@@ -209,10 +209,6 @@ class NodeTree : GUI
                 }
                 
                 var textBox = form.AddTextBox(new ValueGetSetter(newNode, "value"));
-                textBox.onEnter = () =>
-                {
-                    form.Delete();
-                };
             };
         }
         else
@@ -266,10 +262,6 @@ class NodeTree : GUI
                     form.AddHeader("Rename", 1.3f);
                     form.AddLabel("New name");
                     var textBox = form.AddTextBox(new ValueGetSetter(node, "value"));
-                    textBox.onEnter = () =>
-                    {
-                        form.Delete();
-                    };
                 });
             }
             if (node.parent != null)
@@ -456,6 +448,7 @@ class Program
         Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
         Raylib.InitWindow(1000, 800, "ASTEditor");
         Raylib.MaximizeWindow();
+        Raylib.SetExitKey(KeyboardKey.Null);
 
         var form = new Window(null, new Rectangle(0, 0, 1000, 800), World.fontSize);
         var world = new World();

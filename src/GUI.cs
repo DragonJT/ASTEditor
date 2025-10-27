@@ -1,6 +1,4 @@
 
-using System.Numerics;
-using System.Reflection;
 using Raylib_cs;
 
 class Window
@@ -83,17 +81,24 @@ class Window
 
     public void Update()
     {
-        if (Active && selectableGUIs.Count > 0)
+        if (Active)
         {
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
+            if (Raylib.IsKeyPressed(KeyboardKey.Escape))
             {
-                selectedID--;
-                if (selectedID < 0) selectedID = selectableGUIs.Count - 1;
+                Delete();
             }
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
+            if (selectableGUIs.Count > 0)
             {
-                selectedID++;
-                if (selectedID > selectableGUIs.Count - 1) selectedID = 0;
+                if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
+                {
+                    selectedID--;
+                    if (selectedID < 0) selectedID = selectableGUIs.Count - 1;
+                }
+                if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
+                {
+                    selectedID++;
+                    if (selectedID > selectableGUIs.Count - 1) selectedID = 0;
+                }
             }
         }
         Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.White);
@@ -117,7 +122,7 @@ class Window
 
     public void Delete()
     {
-        parent!.child = null;
+        if (parent != null) parent.child = null;
     }
 
     public bool Active => child == null && !startFrame;
@@ -148,7 +153,6 @@ class TextBox : GUI
     int fontSize;
     ValueGetSetter valueGetSetter;
     public string text = "";
-    public Action? onEnter;
 
     public TextBox(Window window, Rectangle rect, int fontSize, ValueGetSetter valueGetSetter) : base(window, rect, true)
     {
@@ -178,10 +182,6 @@ class TextBox : GUI
             {
                 text = text[..^1];
                 valueGetSetter.SetString(text);
-            }
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
-            {
-                onEnter?.Invoke();
             }
             border = Color.Red;
         }
