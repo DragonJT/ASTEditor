@@ -318,7 +318,7 @@ class NodeTree : GUI
                 form.AddLabel("Name");
                 form.AddTextBox();
                 form.AddLabel("hasValue");
-                form.AddTextBox();
+                form.AddBoolBox(false);
             }
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
             {

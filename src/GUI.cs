@@ -14,6 +14,7 @@ class Window
     int fontSize;
     const int spacing = 5;
     const int border = 20;
+    const float labelFraction = 0.4f;
 
     public Window(Window? parent, Rectangle rect, int fontSize)
     {
@@ -48,7 +49,8 @@ class Window
 
     public TextBox AddTextBox()
     {
-        var textBox = new TextBox(this, new Rectangle(rect.X + rect.Width * 0.3f, y, rect.Width * 0.7f - border, fontSize), fontSize);
+        var r = new Rectangle(rect.X + rect.Width * labelFraction, y, rect.Width * (1 - labelFraction) - border, fontSize);
+        var textBox = new TextBox(this, r, fontSize);
         y += fontSize + spacing;
         Add(textBox);
         return textBox;
@@ -62,6 +64,12 @@ class Window
         {
             rect.Height = y - rect.Y + border;
         }
+    }
+
+    public void AddBoolBox(bool value)
+    {
+        Add(new BoolBox(this, new Rectangle(rect.X + rect.Width * labelFraction, y, fontSize, fontSize), value));
+        y += fontSize;
     }
 
     public void AddNodeTree(Node root)
@@ -215,5 +223,30 @@ class Button : GUI
         {
             action();
         }
+    }
+}
+
+class BoolBox : GUI
+{
+    bool value;
+
+    public BoolBox(Window window, Rectangle rect, bool value) : base(window, rect, true)
+    {
+        this.value = value;
+    }
+
+    public override void Update()
+    {
+        Color color = Color.Black;
+        if (Active)
+            color = Color.Red;
+
+        if (value)
+            Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, color);
+        else
+            Raylib.DrawRectangleLinesEx(rect, 4, color);
+
+        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && Active)
+            value = !value;
     }
 }
