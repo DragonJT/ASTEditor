@@ -139,18 +139,6 @@ class Node
     }
 }
 
-class MenuItem
-{
-    public string name;
-    public Action action;
-
-    public MenuItem(string name, Action action)
-    {
-        this.name = name;
-        this.action = action;
-    }
-}
-
 class NodeTree : GUI
 {
     Node root;
@@ -160,7 +148,8 @@ class NodeTree : GUI
     int depth;
     int spaceSize;
     int fontSize;
-    public NodeTree(GUIWindow guiWindow, Node root, int fontSize) : base(guiWindow)
+
+    public NodeTree(Window window, Rectangle rect, Node root, int fontSize) : base(window, rect, true)
     {
         this.root = root;
         selected = root;
@@ -196,14 +185,14 @@ class NodeTree : GUI
         depth--;
     }
 
-    static Action CreateForm(GUIWindow guiWindow, Vector2 pos, int fontSize, Node node, NodeType nodeType)
+    static Action CreateForm(Window parent, Vector2 pos, int fontSize, Node node, NodeType nodeType)
     {
         if (nodeType.hasValue)
         {
             return () =>
             {
                 var rect = new Rectangle(pos.X, pos.Y, 600, fontSize);
-                var form = new Form(guiWindow, rect.Expand(50), fontSize);
+                var form = new Window(parent, rect.Expand(50), fontSize);
                 form.AddHeader(nodeType.name, 1.3f);
                 form.AddLabel("Name");
                 var textBox = form.AddTextBox();
@@ -228,18 +217,17 @@ class NodeTree : GUI
             {
                 var newNode = new Node(node, nodeType, null);
                 node.children.Add(newNode);
-                guiWindow.child = null;
+                parent.child = null;
             };
         }
     }
 
-    static void CreateAddMenuItems(GUIWindow guiWindow, Menu menu, Vector2 pos, int fontSize, Node node)
+    static void CreateAddMenuItems(Window parent, Window menu, Vector2 pos, int fontSize, Node node)
     {
-        var addNodeMenuItem = node.nodeType.subTypes
-            .Select(t => new MenuItem($"Add {t.name}", CreateForm(guiWindow, pos, fontSize, node, t)))
-            .ToArray();
-        menu.menuItems.AddRange(addNodeMenuItem);
-        
+        foreach(var t in node.nodeType.subTypes)
+        {
+            menu.AddButton($"Add {t.name}", CreateForm(parent, pos, fontSize, node, t));
+        }
     }
 
     public void Draw(Node node)
@@ -256,21 +244,21 @@ class NodeTree : GUI
         var m = new Vector2(100, startY + fontSize);
         if (Active && selected == node && RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
         {
-            var menu = new Menu(guiWindow, m, 400, fontSize);
+            var menu = new Window(window, new Rectangle(m, 400, 0), fontSize);
             if (node.nodeType.defaultTypes == null)
             {
-                CreateAddMenuItems(guiWindow, menu, m, fontSize, node);
+                CreateAddMenuItems(window, menu, m, fontSize, node);
             }
             else if (node.nodeType.defaultTypes.id >= 0)
             {
-                CreateAddMenuItems(guiWindow, menu, m, fontSize, node.children[node.nodeType.defaultTypes.id]);
+                CreateAddMenuItems(window, menu, m, fontSize, node.children[node.nodeType.defaultTypes.id]);
             }
             if (node.nodeType.hasValue)
             {
-                menu.menuItems.Add(new MenuItem("Rename", () =>
+                menu.AddButton("Rename", () =>
                 {
                     var rect = new Rectangle(m.X, m.Y, 1000, 300);
-                    var form = new Form(guiWindow, rect, fontSize);
+                    var form = new Window(window, rect, fontSize);
                     form.AddHeader("Rename", 1.3f);
                     form.AddLabel("New name");
                     var textBox = form.AddTextBox();
@@ -279,15 +267,15 @@ class NodeTree : GUI
                         node.value = textBox.text;
                         form.Delete();
                     };
-                }));
+                });
             }
             if (node.parent != null)
             {
-                menu.menuItems.Add(new MenuItem("Delete", () =>
+                menu.AddButton("Delete", () =>
                 {
                     node.parent.children.Remove(node);
                     menu.Delete();
-                }));
+                });
             }
         }
     }
@@ -310,8 +298,8 @@ class NodeTree : GUI
 
     public override void Update()
     {
-        x = 0;
-        y = 0;
+        x = (int)rect.X;
+        y = (int)rect.Y;
         depth = 0;
         spaceSize = Raylib.MeasureText(" ", fontSize);
         Draw(root);
@@ -325,14 +313,16 @@ class NodeTree : GUI
     public List<NodeType> subTypes = [];
     public List<IDisplay> display = [];*/
 
-                var form = new Form(guiWindow, new Rectangle(0, 0, 1000, 800), fontSize);
+                var form = new Window(window, new Rectangle(0, 0, 1000, 800), fontSize);
                 form.AddHeader("Edit", 1.3f);
                 form.AddLabel("Name");
+                form.AddTextBox();
+                form.AddLabel("hasValue");
                 form.AddTextBox();
             }
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
             {
-                var nodes = GetDescendingNodes(root).Where(n=>n.nodeType.IsNewLineInTree).ToList();
+                var nodes = GetDescendingNodes(root).Where(n => n.nodeType.IsNewLineInTree).ToList();
                 var id = nodes.IndexOf(selected);
                 id--;
                 if (id < 0)
@@ -343,7 +333,7 @@ class NodeTree : GUI
             }
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
             {
-                var nodes = GetDescendingNodes(root).Where(n=>n.nodeType.IsNewLineInTree).ToList();
+                var nodes = GetDescendingNodes(root).Where(n => n.nodeType.IsNewLineInTree).ToList();
                 var id = nodes.IndexOf(selected);
                 id++;
                 if (id >= nodes.Count)
@@ -353,6 +343,7 @@ class NodeTree : GUI
                 selected = nodes[id];
             }
         }
+        Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
     }
 }
 
@@ -366,7 +357,7 @@ class Program
         Raylib.InitWindow(1000, 800, "ASTEditor");
         Raylib.MaximizeWindow();
 
-        var form = new Form(null, new Rectangle(0,0,1000, 800), fontSize);
+        var form = new Window(null, new Rectangle(0,0,1000, 800), fontSize);
         var exprType = new NodeType("expression", false);
         var typeType = new NodeType("type", true);
         var nameType = new NodeType("name", true);
