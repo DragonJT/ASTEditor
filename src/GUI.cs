@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Raylib_cs;
 
 abstract class GUIWindow
@@ -122,5 +123,82 @@ class TextBox : GUI
         Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.RayWhite);
         Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
         Raylib.DrawText(text, (int)rect.X, (int)rect.Y, fontSize, Color.Black);
+    }
+}
+
+class Label : GUI
+{
+    Vector2 position;
+    string label;
+    int fontSize;
+    Color color;
+
+    public Label(GUIWindow guiWindow, Vector2 position, string label, int fontSize, Color color) : base(guiWindow)
+    {
+        this.position = position;
+        this.label = label;
+        this.fontSize = fontSize;
+        this.color = color;
+    }
+
+    public override void Update()
+    {
+        Raylib.DrawText(label, (int)position.X, (int)position.Y, fontSize, color);
+    }
+}
+
+class Form : GUIWindow
+{
+    Rectangle rect;
+    List<GUI> guis = [];
+    float y;
+    int fontSize;
+    const int spacing = 5;
+    const int border = 20;
+
+    public Form(GUIWindow? parent, Rectangle rect, int fontSize)
+    {
+        SetParent(parent);
+        this.rect = rect;
+        y = rect.Y + border;
+        this.fontSize = fontSize;
+    }
+
+    public void AddHeader(string text, float fractionFontSize)
+    {
+        var headerFontSize = (int)(fontSize * fractionFontSize);
+        var length = Raylib.MeasureText(text, headerFontSize);
+        guis.Add(new Label(this, new Vector2(rect.Width / 2 + rect.X - length / 2f, y), text, headerFontSize, Color.DarkGray));
+        y += headerFontSize + spacing;
+    }
+
+    public void AddLabel(string text)
+    {
+        guis.Add(new Label(this, new Vector2(rect.X + border, y), text, fontSize, Color.Black));
+    }
+
+    public TextBox AddTextBox()
+    {
+        var textBox = new TextBox(this, new Rectangle(rect.X + rect.Width * 0.3f, y, rect.Width * 0.7f - border, fontSize), fontSize);
+        y += fontSize + spacing;
+        guis.Add(textBox);
+        return textBox;
+    }
+
+    public void AddNodeTree(Node root)
+    {
+        guis.Add(new NodeTree(this, root, fontSize));
+    }
+
+    public override void Update()
+    {
+        Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.White);
+        foreach (var g in guis)
+        {
+            g.Update();
+        }
+        Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
+        child?.Update();
+        startFrame = false;
     }
 }

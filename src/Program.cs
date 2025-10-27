@@ -158,13 +158,13 @@ class NodeTree : GUI
     int x;
     int y;
     int depth;
-    int fontSize = 50;
     int spaceSize;
-
-    public NodeTree(GUIWindow guiWindow, Node root) : base(guiWindow)
+    int fontSize;
+    public NodeTree(GUIWindow guiWindow, Node root, int fontSize) : base(guiWindow)
     {
         this.root = root;
         selected = root;
+        this.fontSize = fontSize;
     }
     
     public void DrawText(string text, Color color)
@@ -203,8 +203,10 @@ class NodeTree : GUI
             return () =>
             {
                 var rect = new Rectangle(pos.X, pos.Y, 600, fontSize);
-                var form = new Form(guiWindow, rect.Expand(50));
-                var textBox = new TextBox(form, rect, fontSize);
+                var form = new Form(guiWindow, rect.Expand(50), fontSize);
+                form.AddHeader(nodeType.name, 1.3f);
+                form.AddLabel("Name");
+                var textBox = form.AddTextBox();
                 textBox.onEnter = () =>
                 {
                     var newNode = new Node(node, nodeType, textBox.text);
@@ -218,7 +220,6 @@ class NodeTree : GUI
                     node.children.Add(newNode);
                     form.Delete();
                 };
-                form.Add(textBox);
             };
         }
         else
@@ -268,15 +269,16 @@ class NodeTree : GUI
             {
                 menu.menuItems.Add(new MenuItem("Rename", () =>
                 {
-                    var rect = new Rectangle(m.X, m.Y, 600, fontSize);
-                    var form = new Form(guiWindow, rect.Expand(50));
-                    var textBox = new TextBox(form, rect, fontSize);
+                    var rect = new Rectangle(m.X, m.Y, 1000, 300);
+                    var form = new Form(guiWindow, rect, fontSize);
+                    form.AddHeader("Rename", 1.3f);
+                    form.AddLabel("New name");
+                    var textBox = form.AddTextBox();
                     textBox.onEnter = () =>
                     {
                         node.value = textBox.text;
                         form.Delete();
                     };
-                    form.Add(textBox);
                 }));
             }
             if (node.parent != null)
@@ -315,6 +317,19 @@ class NodeTree : GUI
         Draw(root);
         if (Active)
         {
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.E))
+            {
+                /*public string name;
+    public bool hasValue;
+    public DefaultTypes? defaultTypes;
+    public List<NodeType> subTypes = [];
+    public List<IDisplay> display = [];*/
+
+                var form = new Form(guiWindow, new Rectangle(0, 0, 1000, 800), fontSize);
+                form.AddHeader("Edit", 1.3f);
+                form.AddLabel("Name");
+                form.AddTextBox();
+            }
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
             {
                 var nodes = GetDescendingNodes(root).Where(n=>n.nodeType.IsNewLineInTree).ToList();
@@ -341,45 +356,17 @@ class NodeTree : GUI
     }
 }
 
-class Form : GUIWindow
-{
-    Rectangle rect;
-    List<GUI> guis = [];
-
-    public Form(GUIWindow? parent, Rectangle rect)
-    {
-        SetParent(parent);
-        this.rect = rect;
-    }
-
-    public void Add(GUI gui)
-    {
-        guis.Add(gui);
-    }
-
-    public override void Update()
-    {
-        Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.White);
-        foreach (var g in guis)
-        {
-            g.Update();
-        }
-        Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
-        child?.Update();
-        startFrame = false;
-    }
-}
-
-
 class Program
 {
+    
     static void Main()
     {
+        const int fontSize = 50;
         Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
         Raylib.InitWindow(1000, 800, "ASTEditor");
         Raylib.MaximizeWindow();
 
-        var form = new Form(null, new Rectangle(0,0,1000, 800));
+        var form = new Form(null, new Rectangle(0,0,1000, 800), fontSize);
         var exprType = new NodeType("expression", false);
         var typeType = new NodeType("type", true);
         var nameType = new NodeType("name", true);
@@ -431,7 +418,7 @@ class Program
             new DisplayChildrenOfChild(2),
         ]);
         var root = new Node(null, rootType, null);
-        form.Add(new NodeTree(form, root));
+        form.AddNodeTree(root);
 
         while (!Raylib.WindowShouldClose())
         {
