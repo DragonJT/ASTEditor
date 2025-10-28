@@ -1,5 +1,4 @@
 ﻿
-using System.ComponentModel;
 using Raylib_cs;
 
 static class RaylibHelper
@@ -12,6 +11,20 @@ static class RaylibHelper
     public static Rectangle Expand(this Rectangle rect, float radius)
     {
         return new Rectangle(rect.X - radius, rect.Y - radius, rect.Width + radius * 2, rect.Height + radius * 2);
+    }
+
+    public static string GetText()
+    {
+        var text = "";
+        int key = Raylib.GetCharPressed();
+        while (key > 0)
+        {
+            if ((key >= 32) && (key <= 125))
+                text += (char)key;
+
+            key = Raylib.GetCharPressed();
+        }
+        return text;
     }
 }
 
@@ -27,7 +40,7 @@ abstract class Node
     }
 
     public abstract void Draw(Window window, NodeTree nodeTree);
-    public abstract void Input(Window window, NodeTree nodeTree);
+    public abstract void Input(Window window, NodeTree nodeTree, string text);
 
     public Node[] DescendingNodes()
     {
@@ -109,29 +122,57 @@ class NodeTree : GUI
         var active = window.IsActive(this);
         y = window.y;
         x = (int)(window.rect.X + Program.style.border);
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
+        if (active)
         {
-            MoveSelected(-1);
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
+            {
+                MoveSelected(-1);
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
+            {
+                MoveSelected(1);
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
+            {
+                selected.Input(window, this, "");
+            }
+            var text = RaylibHelper.GetText();
+            if (text.Length > 0)
+            {
+                selected.Input(window, this, text);
+            }
         }
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
-        {
-            MoveSelected(1);
-        }
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && active)
-        {
-            selected.Input(window, this);
-        }
+
         root.Draw(window, this);
     }
 }
 
+interface IType
+{
+    string Name{ get; }
+}
+
+class Primitive(string name, Type type) : IType
+{
+    public string Name{ get; } = name;
+    public Type type = type;
+}
 
 class Program
 {
-    public static Style style = new ();
+    public static Style style = new();
+    public static List<Primitive> primitives = [];
 
     static void Main()
     {
+        primitives.Add(new Primitive("int", typeof(int)));
+        primitives.Add(new Primitive("float", typeof(float)));
+        primitives.Add(new Primitive("void", typeof(void)));
+        primitives.Add(new Primitive("double", typeof(double)));
+        primitives.Add(new Primitive("long", typeof(long)));
+        primitives.Add(new Primitive("string", typeof(string)));
+        primitives.Add(new Primitive("char", typeof(char)));
+
         Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
         Raylib.InitWindow(1000, 800, "ASTEditor");
         Raylib.MaximizeWindow();

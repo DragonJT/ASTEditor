@@ -23,6 +23,7 @@ class Window
     List<GUI> guis = [];
     List<GUI> selectableGUIs = [];
     public int y;
+    public Action? lateUpdate;
 
     public Window(Window? parent, Rectangle rect)
     {
@@ -82,6 +83,8 @@ class Window
             y += g.Height(this);
         }
         Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
+        lateUpdate?.Invoke();
+        lateUpdate = null;
         child?.Update();
         startFrame = false;
     }
@@ -136,17 +139,7 @@ class TextBox : GUI
         Color border = Color.Black;
         if (window.IsActive(this))
         {
-            int key = Raylib.GetCharPressed();
-            while (key > 0)
-            {
-                if ((key >= 32) && (key <= 125))
-                {
-                    text += (char)key;
-                }
-
-                key = Raylib.GetCharPressed();
-            }
-
+            text += RaylibHelper.GetText();
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
             {
                 text = text[..^1];
@@ -172,18 +165,21 @@ class TextBox : GUI
 class Label : GUI
 {
     string label;
+    GUI value;
 
-    public Label(string label) : base(false)
+    public Label(string label, GUI value) : base(false)
     {
         this.label = label;
+        this.value = value;
     }
 
-    public override int Height(Window window) => 0;
+    public override int Height(Window window) => value.Height(window);
 
     public override void Update(Window window)
     {
         var style = Program.style;
         Raylib.DrawText(label, style.border, window.y, style.fontSize, style.labelColor);
+        value.Update(window);
     }
 }
 
@@ -208,6 +204,115 @@ class Header : GUI
             (int)window.y,
             style.headerFontSize,
             style.headerColor);
+    }
+}
+
+class Search(string name, Action action)
+{
+    public string name = name;
+    public Action action = action;
+}
+
+class SearchBox : GUI
+{
+    string text;
+    Rectangle searchRect;
+    Search[] searches;
+    Search current;
+    Search[] currentSearches;
+
+    public SearchBox(string text, Search[] searches) : base(true)
+    {
+        this.text = text;
+        this.searches = searches;
+        UpdateCurrentSearches();
+        current = currentSearches![0];
+    }
+
+    public override int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+
+    void UpdateCurrentSearches()
+    {
+        currentSearches = searches.Where(s => s.name.StartsWith(text)).ToArray();
+        while (currentSearches.Length == 0 && text.Length > 0)
+        {
+            text = text[..^1];
+            currentSearches = searches.Where(s => s.name.StartsWith(text)).ToArray();
+        }
+        if (!currentSearches.Contains(current))
+        {
+            current = currentSearches[0];
+        }
+    }
+
+    void MoveCurrent(int delta)
+    {
+        var index = Array.IndexOf(currentSearches, current);
+        index += delta;
+        if (index >= currentSearches.Length) index = 0;
+        if (index < 0) index = currentSearches.Length - 1;
+        current = currentSearches[index];
+    }
+
+    public override void Update(Window window)
+    {
+        var style = Program.style;
+        Color border = Color.Black;
+        if (window.IsActive(this))
+        {
+            var startText = text;
+            text += RaylibHelper.GetText();
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
+            {
+                text = text[..^1];
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
+            {
+                current.action();
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
+            {
+                MoveCurrent(-1);
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
+            {
+                MoveCurrent(1);
+            }
+            border = Color.Red;
+            if (startText != text)
+            {
+                UpdateCurrentSearches();
+            }
+        }
+        var r = window.rect;
+        var rect = new Rectangle( r.X + style.border, window.y, r.Width - style.border * 2, style.fontSize);
+        Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.RayWhite);
+        Raylib.DrawRectangleLinesEx(rect, 2, border);
+        Raylib.DrawText(text, (int)rect.X, (int)rect.Y, style.fontSize, Color.Black);
+
+        searchRect = new Rectangle(r.X + r.Width * style.labelFraction, window.y + style.fontSize, 400, 0);
+        window.lateUpdate = LateUpdate;
+    }
+
+    public void LateUpdate()
+    {
+        if (!currentSearches.Contains(current))
+        {
+            current = currentSearches[0];
+        }
+        searchRect.Height = currentSearches.Length * Program.style.fontSize;
+        Raylib.DrawRectangle((int)searchRect.X, (int)searchRect.Y, (int)searchRect.Width, (int)searchRect.Height, Color.White);
+        int y = (int)searchRect.Y;
+        foreach (var s in currentSearches)
+        {
+            if (s == current)
+            {
+                Raylib.DrawRectangle((int)searchRect.X, y, (int)searchRect.Width, Program.style.fontSize, Color.Red);
+            }
+            Raylib.DrawText(s.name, (int)searchRect.X, y, Program.style.fontSize, Color.Black);
+            y += Program.style.fontSize;
+        }
+        Raylib.DrawRectangleLinesEx(searchRect, 2, Color.Black);
     }
 }
 
