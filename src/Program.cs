@@ -58,7 +58,9 @@ class NodeTree : GUI
     int y;
     int depth;
 
-    public NodeTree(Node root) : base(true)
+    public GUI[] Selectables => [this];
+
+    public NodeTree(Node root)
     {
         this.root = root;
         selected = root;
@@ -101,7 +103,7 @@ class NodeTree : GUI
         }
     }
 
-    public override int Height(Window window)
+    public int Height(Window window)
     {
         return (int)(window.rect.Height - window.y - Program.style.border);
     }
@@ -117,7 +119,7 @@ class NodeTree : GUI
         selected = nodes[index];
     }
 
-    public override void Update(Window window)
+    public void Update(Window window)
     {
         var active = window.IsActive(this);
         y = window.y;
@@ -180,8 +182,7 @@ class Program
 
         var root = new Root();
 
-        var form = new Window(null, new Rectangle(0, 0, 1000, 800));
-        form.Add(new NodeTree(root));
+        var form = new Window(null, new Rectangle(0, 0, 1000, 800), [new NodeTree(root)]);
 
         while (!Raylib.WindowShouldClose())
         {

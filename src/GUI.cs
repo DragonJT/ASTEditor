@@ -1,4 +1,5 @@
 
+using System.Data;
 using Raylib_cs;
 
 class Style
@@ -15,29 +16,57 @@ class Style
 
 class Window
 {
-    public int selectedID = 0;
-    public bool startFrame = true;
-    public Window? parent;
-    public Window? child;
+    Window? parent;
+    Window? child;
     public Rectangle rect;
-    List<GUI> guis = [];
-    List<GUI> selectableGUIs = [];
+    public GUI? selected;
+    public bool startFrame = true;
+    GUI[] guis;
+    GUI[] selectableGUIs;
     public int y;
-    public Action? lateUpdate;
+    public Action? AdditionalInput;
 
-    public Window(Window? parent, Rectangle rect)
+    public void AttachChild(Window child)
     {
-        SetParent(parent);
-        this.rect = rect;
+        this.child = child;
+        child.parent = this;
     }
 
-    public void Add(GUI gui)
+    void SetDefaultSelected()
     {
-        guis.Add(gui);
-        if (gui.isSelectable)
+        if (selectableGUIs.Length > 0)
+            selected = selectableGUIs[0];
+        else
+            selected = null;
+    }
+
+    public void UpdateGUIs(GUI[] guis)
+    {
+        this.guis = guis;
+        selectableGUIs = [.. guis.SelectMany(g => g.Selectables)];
+        if (!selectableGUIs.Contains(selected))
         {
-            selectableGUIs.Add(gui);
+            SetDefaultSelected();
+            selected = selectableGUIs[0];
         }
+    }
+
+    public Window(Window? parent, Rectangle rect, GUI[] guis)
+    {
+        parent?.AttachChild(this);
+        this.rect = rect;
+        this.guis = guis;
+        selectableGUIs = [.. guis.SelectMany(g => g.Selectables)];
+        SetDefaultSelected();
+    }
+
+    public void MoveSelected(int delta)
+    {
+        var index = Array.IndexOf(selectableGUIs, selected);
+        index += delta;
+        if (index < 0) index = selectableGUIs.Length - 1;
+        if (index > selectableGUIs.Length - 1) index = 0;
+        selected = selectableGUIs[index];
     }
 
     public void Update()
@@ -51,19 +80,18 @@ class Window
             {
                 Delete();
             }
-            if (selectableGUIs.Count > 0)
+            if (selectableGUIs.Length > 0)
             {
                 if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
                 {
-                    selectedID--;
-                    if (selectedID < 0) selectedID = selectableGUIs.Count - 1;
+                    MoveSelected(-1);
                 }
                 if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
                 {
-                    selectedID++;
-                    if (selectedID > selectableGUIs.Count - 1) selectedID = 0;
+                    MoveSelected(1);
                 }
             }
+            AdditionalInput?.Invoke();
         }
         float height = style.border + style.spacing;
         foreach (var g in guis)
@@ -72,7 +100,7 @@ class Window
         }
         height += style.border;
 
-        if(rect.Height < height)
+        if (rect.Height < height)
         {
             rect.Height = height;
         }
@@ -83,24 +111,8 @@ class Window
             y += g.Height(this);
         }
         Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
-        lateUpdate?.Invoke();
-        lateUpdate = null;
-        child?.Update();
         startFrame = false;
-    }
-
-    public void SetParent(Window? parent)
-    {
-        if (parent != null)
-        {
-            this.parent = parent;
-            parent.child = this;
-        }
-    }
-
-    public void Delete()
-    {
-        if (parent != null) parent.child = null;
+        child?.Update();
     }
 
     public bool Active => child == null && !startFrame;
@@ -109,19 +121,23 @@ class Window
     {
         if (Active)
         {
-            var index = selectableGUIs.IndexOf(gui);
-            return index == selectedID;
+            return selected == gui;
         }
         return false;
     }
+
+    public void Delete()
+    {
+        if (parent != null)
+            parent.child = null;
+    }
 }
 
-abstract class GUI(bool isSelectable)
+interface GUI
 {
-    public bool isSelectable = isSelectable;
-
-    public abstract void Update(Window window);
-    public abstract int Height(Window window);
+    GUI[] Selectables { get; }
+    void Update(Window window);
+    int Height(Window window);
 }
 
 class TextBox : GUI
@@ -129,11 +145,13 @@ class TextBox : GUI
     public string text = "";
     public Action? onEnter;
 
-    public TextBox() : base(true) { }
+    public TextBox() { }
 
-    public override int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+    public GUI[] Selectables => [this];
 
-    public override void Update(Window window)
+    public int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+
+    public void Update(Window window)
     {
         var style = Program.style;
         Color border = Color.Black;
@@ -150,15 +168,14 @@ class TextBox : GUI
             }
             border = Color.Red;
         }
-        var r = window.rect;
-        var rect = new Rectangle(
-            r.X + r.Width * style.labelFraction,
+        var r = new Rectangle(
+            window.rect.X + window.rect.Width * style.labelFraction,
             window.y,
-            r.Width * (1 - style.labelFraction) - style.border,
+            window.rect.Width * (1 - style.labelFraction) - style.border,
             style.fontSize);
-        Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.RayWhite);
-        Raylib.DrawRectangleLinesEx(rect, 2, border);
-        Raylib.DrawText(text, (int)rect.X, (int)rect.Y, style.fontSize, Color.Black);
+        Raylib.DrawRectangle((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height, Color.RayWhite);
+        Raylib.DrawRectangleLinesEx(r, 2, border);
+        Raylib.DrawText(text, (int)r.X, (int)r.Y, style.fontSize, Color.Black);
     }
 }
 
@@ -167,15 +184,17 @@ class Label : GUI
     string label;
     GUI value;
 
-    public Label(string label, GUI value) : base(false)
+    public Label(string label, GUI value)
     {
         this.label = label;
         this.value = value;
     }
 
-    public override int Height(Window window) => value.Height(window);
+    public GUI[] Selectables => [value];
 
-    public override void Update(Window window)
+    public int Height(Window window) => value.Height(window);
+
+    public void Update(Window window)
     {
         var style = Program.style;
         Raylib.DrawText(label, style.border, window.y, style.fontSize, style.labelColor);
@@ -183,18 +202,15 @@ class Label : GUI
     }
 }
 
-class Header : GUI
+class Header(string header) : GUI
 {
-    string header;
+    string header = header;
 
-    public Header(string header) : base(false)
-    {
-        this.header = header;
-    }
+    public GUI[] Selectables => throw new NotImplementedException();
 
-    public override int Height(Window window) => Program.style.headerFontSize + Program.style.spacing;
+    public int Height(Window window) => Program.style.headerFontSize + Program.style.spacing;
 
-    public override void Update(Window window)
+    public void Update(Window window)
     {
         var style = Program.style;
         var length = Raylib.MeasureText(header, style.headerFontSize);
@@ -207,129 +223,82 @@ class Header : GUI
     }
 }
 
-class Search(string name, Action action)
-{
-    public string name = name;
-    public Action action = action;
-}
-
 class SearchBox : GUI
 {
     string text;
-    Rectangle searchRect;
-    Search[] searches;
-    Search current;
-    Search[] currentSearches;
+    Button[] searches;
+    Window searchWindow;
 
-    public SearchBox(string text, Search[] searches) : base(true)
+    public SearchBox(string text, Button[] searches)
     {
         this.text = text;
         this.searches = searches;
+        searchWindow = new Window(null, new Rectangle(), []);
+        searchWindow.AdditionalInput = OnInput;
         UpdateCurrentSearches();
-        current = currentSearches![0];
     }
 
-    public override int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+    public GUI[] Selectables => [this];
+
+    public int Height(Window window) => Program.style.fontSize + Program.style.spacing;
 
     void UpdateCurrentSearches()
     {
-        currentSearches = searches.Where(s => s.name.StartsWith(text)).ToArray();
+        var currentSearches = searches.Where(s => s.text.StartsWith(text)).ToArray();
         while (currentSearches.Length == 0 && text.Length > 0)
         {
             text = text[..^1];
-            currentSearches = searches.Where(s => s.name.StartsWith(text)).ToArray();
+            currentSearches = searches.Where(s => s.text.StartsWith(text)).ToArray();
         }
-        if (!currentSearches.Contains(current))
-        {
-            current = currentSearches[0];
-        }
+        searchWindow.UpdateGUIs(currentSearches);
     }
 
-    void MoveCurrent(int delta)
+    public void OnInput()
     {
-        var index = Array.IndexOf(currentSearches, current);
-        index += delta;
-        if (index >= currentSearches.Length) index = 0;
-        if (index < 0) index = currentSearches.Length - 1;
-        current = currentSearches[index];
+        var startText = text;
+        text += RaylibHelper.GetText();
+        if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
+        {
+            text = text[..^1];
+        }
+        if (startText != text)
+        {
+            UpdateCurrentSearches();
+        }
     }
 
-    public override void Update(Window window)
+    public void Update(Window window)
     {
         var style = Program.style;
-        Color border = Color.Black;
-        if (window.IsActive(this))
-        {
-            var startText = text;
-            text += RaylibHelper.GetText();
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
-            {
-                text = text[..^1];
-            }
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
-            {
-                current.action();
-            }
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
-            {
-                MoveCurrent(-1);
-            }
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
-            {
-                MoveCurrent(1);
-            }
-            border = Color.Red;
-            if (startText != text)
-            {
-                UpdateCurrentSearches();
-            }
-        }
+        Color border = window.selected == this ? Color.Red : Color.Black;
         var r = window.rect;
-        var rect = new Rectangle( r.X + style.border, window.y, r.Width - style.border * 2, style.fontSize);
+        var rect = new Rectangle(r.X + style.border, window.y, r.Width - style.border * 2, style.fontSize);
         Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.RayWhite);
         Raylib.DrawRectangleLinesEx(rect, 2, border);
         Raylib.DrawText(text, (int)rect.X, (int)rect.Y, style.fontSize, Color.Black);
 
-        searchRect = new Rectangle(r.X + r.Width * style.labelFraction, window.y + style.fontSize, 400, 0);
-        window.lateUpdate = LateUpdate;
-    }
-
-    public void LateUpdate()
-    {
-        if (!currentSearches.Contains(current))
-        {
-            current = currentSearches[0];
-        }
-        searchRect.Height = currentSearches.Length * Program.style.fontSize;
-        Raylib.DrawRectangle((int)searchRect.X, (int)searchRect.Y, (int)searchRect.Width, (int)searchRect.Height, Color.White);
-        int y = (int)searchRect.Y;
-        foreach (var s in currentSearches)
-        {
-            if (s == current)
-            {
-                Raylib.DrawRectangle((int)searchRect.X, y, (int)searchRect.Width, Program.style.fontSize, Color.Red);
-            }
-            Raylib.DrawText(s.name, (int)searchRect.X, y, Program.style.fontSize, Color.Black);
-            y += Program.style.fontSize;
-        }
-        Raylib.DrawRectangleLinesEx(searchRect, 2, Color.Black);
+        var searchRect = new Rectangle(r.X + r.Width * style.labelFraction, window.y + style.fontSize, 400, 0);
+        searchWindow.rect = searchRect;
+        window.AttachChild(searchWindow);
     }
 }
 
 class Button : GUI
 {
-    string text;
+    public string text;
     Action action;
 
-    public Button(string text, Action action) : base(true)
+    public Button(string text, Action action)
     {
         this.text = text;
         this.action = action;
     }
 
-    public override int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+    public GUI[] Selectables => [this];
 
-    public override void Update(Window window)
+    public int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+
+    public void Update(Window window)
     {
         var style = Program.style;
         var rect = new Rectangle(window.rect.X + style.border, window.y, window.rect.Width - style.border * 2, style.fontSize);
@@ -350,14 +319,16 @@ class BoolBox : GUI
 {
     bool value;
 
-    public BoolBox(bool value) : base(true)
+    public BoolBox(bool value)
     {
         this.value = value;
     }
 
-    public override int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+    public GUI[] Selectables => [this];
 
-    public override void Update(Window window)
+    public int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+
+    public void Update(Window window)
     {
         var style = Program.style;
         var active = window.IsActive(this);

@@ -16,21 +16,20 @@ class Function(IType returnType, Node parent) : Node(parent)
         nodeTree.DrawChildren(window, children);
     }
 
-    public static void CreateFunction(List<Search> searches, Node node, NodeTree nodeTree, Window window)
+    public static void CreateFunction(List<Button> searches, Node node, NodeTree nodeTree, Window window)
     {
         var classes = node.Root.DescendingNodes().OfType<Class>();
         IType[] types = [.. classes, .. Program.primitives];
         foreach (var t in types)
         {
-            searches.Add(new Search(t.Name, () =>
+            searches.Add(new Button(t.Name, () =>
             {
                 var f = new Function(t, node);
                 node.children.Add(f);
                 nodeTree.selected = f;
                 f.Input(window, nodeTree, "");
 
-                var form = new Window(window, new Rectangle(100, 100, 400, 400));
-                form.Add(f.name);
+                var form = new Window(window, new Rectangle(100, 100, 400, 400), [f.name]);
                 f.name.onEnter = () =>
                 {
                     form.Delete();
@@ -61,17 +60,16 @@ class Class(Node parent) : Node(parent), IType
         nodeTree.DrawChildren(window, children);
     }
 
-    public static void CreateClass(List<Search> searches, Node node, NodeTree nodeTree, Window window)
+    public static void CreateClass(List<Button> searches, Node node, NodeTree nodeTree, Window window)
     {
-        searches.Add(new Search("class", () =>
+        searches.Add(new Button("class", () =>
         {
             var c = new Class(node);
             node.children.Add(c);
             nodeTree.selected = c;
             c.Input(window, nodeTree, "");
 
-            var form = new Window(window, new Rectangle(100, 100, 400, 400));
-            form.Add(c.name);
+            var form = new Window(window, new Rectangle(100, 100, 400, 400), [c.name]);
             c.name.onEnter = () =>
             {
                 form.Delete();
@@ -81,10 +79,10 @@ class Class(Node parent) : Node(parent), IType
 
     public override void Input(Window window, NodeTree nodeTree, string text)
     {
-        var menu = new Window(window, new Rectangle(100, 100, 400, 400));
-        var searches = new List<Search>();
+        var searches = new List<Button>();
         Function.CreateFunction(searches, this, nodeTree, window);
-        menu.Add(new SearchBox(text, [.. searches]));
+        new Window(window, new Rectangle(100, 100, 400, 400), [new SearchBox(text, [..searches])]);
+
     }
 }
 
@@ -102,17 +100,16 @@ class Module(Node parent) : Node(parent)
         nodeTree.DrawChildren(window, children);
     }
 
-    public static void CreateModule(List<Search> searches, Node node, NodeTree nodeTree, Window window)
+    public static void CreateModule(List<Button> searches, Node node, NodeTree nodeTree, Window window)
     {
-        searches.Add(new Search("module", () =>
+        searches.Add(new Button("module", () =>
         {
             var m = new Module(node);
             node.children.Add(m);
             nodeTree.selected = m;
             m.Input(window, nodeTree, "");
-
-            var form = new Window(window, new Rectangle(100, 100, 400, 400));
-            form.Add(m.name);
+            
+            var form = new Window(window, new Rectangle(100, 100, 400, 400), [m.name]);
             m.name.onEnter = () =>
             {
                 form.Delete();
@@ -122,12 +119,12 @@ class Module(Node parent) : Node(parent)
 
     public override void Input(Window window, NodeTree nodeTree, string text)
     {
-        var menu = new Window(window, new Rectangle(100, 100, 400, 400));
-        var searches = new List<Search>();
+        var searches = new List<Button>();
         CreateModule(searches, this, nodeTree, window);
         Class.CreateClass(searches, this, nodeTree, window);
         Function.CreateFunction(searches, this, nodeTree, window);
-        menu.Add(new SearchBox(text, [.. searches]));
+        new Window(window, new Rectangle(100, 100, 400, 400),  [new SearchBox(text, [..searches])]);
+
     }
 }
 
@@ -145,9 +142,8 @@ class Root : Node
     
     public override void Input(Window window, NodeTree nodeTree, string text)
     {
-        var menu = new Window(window, new Rectangle(100, 100, 400, 400));
-        var searches = new List<Search>();
+        var searches = new List<Button>();
         Module.CreateModule(searches, this, nodeTree, window);
-        menu.Add(new SearchBox(text, [.. searches]));
+        new Window(window, new Rectangle(100, 100, 400, 400), [new SearchBox(text, [..searches])]);
     }
 }
