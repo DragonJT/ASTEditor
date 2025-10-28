@@ -1,32 +1,36 @@
 
 using Raylib_cs;
 
+class Style
+{
+    public int fontSize = 50;
+    public int headerFontSize = 80;
+    public Color headerColor = Color.DarkGray;
+    public int spacing = 5;
+    public int border = 20;
+    public float labelFraction = 0.4f;
+    public Color labelColor = Color.Black;
+    public int spaceSize = 20;
+}
+
 class Window
 {
     public int selectedID = 0;
     public bool startFrame = true;
     public Window? parent;
     public Window? child;
-    Rectangle rect;
+    public Rectangle rect;
     List<GUI> guis = [];
     List<GUI> selectableGUIs = [];
-    float y;
-    int fontSize;
-    const int spacing = 5;
-    const int border = 20;
-    const float labelFraction = 0.4f;
+    public int y;
 
-    public float Y => y;
-
-    public Window(Window? parent, Rectangle rect, int fontSize)
+    public Window(Window? parent, Rectangle rect)
     {
         SetParent(parent);
         this.rect = rect;
-        y = rect.Y + border;
-        this.fontSize = fontSize;
     }
 
-    void Add(GUI gui)
+    public void Add(GUI gui)
     {
         guis.Add(gui);
         if (gui.isSelectable)
@@ -35,53 +39,12 @@ class Window
         }
     }
 
-    public void AddHeader(string text, float fractionFontSize)
-    {
-        var headerFontSize = (int)(fontSize * fractionFontSize);
-        var length = Raylib.MeasureText(text, headerFontSize);
-        var r = new Rectangle(rect.Width / 2 + rect.X - length / 2f, y, length, headerFontSize);
-        Add(new Label(this, r, text, headerFontSize, Color.DarkGray));
-        y += headerFontSize + spacing;
-    }
-
-    public void AddLabel(string text)
-    {
-        Add(new Label(this, new Rectangle(rect.X + border, y, rect.Width * 0.3f, fontSize), text, fontSize, Color.Black));
-    }
-
-    public TextBox AddTextBox(ValueGetSetter valueGetSetter)
-    {
-        var r = new Rectangle(rect.X + rect.Width * labelFraction, y, rect.Width * (1 - labelFraction) - border, fontSize);
-        var textBox = new TextBox(this, r, fontSize, valueGetSetter);
-        y += fontSize + spacing;
-        Add(textBox);
-        return textBox;
-    }
-
-    public void AddButton(string text, Action action)
-    {
-        Add(new Button(this, new Rectangle(rect.X + border, y, rect.Width - border * 2, fontSize), text, fontSize, action));
-        y += fontSize;
-        if(rect.Y + rect.Height < y)
-        {
-            rect.Height = y - rect.Y + border;
-        }
-    }
-
-    public void AddBoolBox(bool value)
-    {
-        Add(new BoolBox(this, new Rectangle(rect.X + rect.Width * labelFraction, y, fontSize, fontSize), value));
-        y += fontSize;
-    }
-
-    public void AddNodeTree(Node root)
-    {
-        Add(new NodeTree(this, new Rectangle(rect.X + border, y, rect.Width - border * 2, rect.Height - y - border), root, fontSize));
-    }
-
     public void Update()
     {
-        if (Active)
+        var style = Program.style;
+        y = (int)(rect.Y + style.border + style.spacing);
+        var active = Active;
+        if (active)
         {
             if (Raylib.IsKeyPressed(KeyboardKey.Escape))
             {
@@ -101,10 +64,22 @@ class Window
                 }
             }
         }
+        float height = style.border + style.spacing;
+        foreach (var g in guis)
+        {
+            height += g.Height(this);
+        }
+        height += style.border;
+
+        if(rect.Height < height)
+        {
+            rect.Height = height;
+        }
         Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.White);
         foreach (var g in guis)
         {
-            g.Update();
+            g.Update(this);
+            y += g.Height(this);
         }
         Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
         child?.Update();
@@ -138,33 +113,28 @@ class Window
     }
 }
 
-abstract class GUI(Window window, Rectangle rect, bool isSelectable)
+abstract class GUI(bool isSelectable)
 {
     public bool isSelectable = isSelectable;
-    public readonly Window window = window;
-    public Rectangle rect= rect;
 
-    public abstract void Update();
-    public bool Active => window.IsActive(this);
+    public abstract void Update(Window window);
+    public abstract int Height(Window window);
 }
 
 class TextBox : GUI
 {
-    int fontSize;
-    ValueGetSetter valueGetSetter;
     public string text = "";
+    public Action? onEnter;
 
-    public TextBox(Window window, Rectangle rect, int fontSize, ValueGetSetter valueGetSetter) : base(window, rect, true)
-    {
-        this.fontSize = fontSize;
-        this.valueGetSetter = valueGetSetter;
-    }
+    public TextBox() : base(true) { }
 
-    public override void Update()
+    public override int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+
+    public override void Update(Window window)
     {
-        text = valueGetSetter.GetString();
+        var style = Program.style;
         Color border = Color.Black;
-        if (Active)
+        if (window.IsActive(this))
         {
             int key = Raylib.GetCharPressed();
             while (key > 0)
@@ -172,7 +142,6 @@ class TextBox : GUI
                 if ((key >= 32) && (key <= 125))
                 {
                     text += (char)key;
-                    valueGetSetter.SetString(text);
                 }
 
                 key = Raylib.GetCharPressed();
@@ -181,56 +150,91 @@ class TextBox : GUI
             if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
             {
                 text = text[..^1];
-                valueGetSetter.SetString(text);
+            }
+            if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
+            {
+                onEnter?.Invoke();
             }
             border = Color.Red;
         }
+        var r = window.rect;
+        var rect = new Rectangle(
+            r.X + r.Width * style.labelFraction,
+            window.y,
+            r.Width * (1 - style.labelFraction) - style.border,
+            style.fontSize);
         Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.RayWhite);
         Raylib.DrawRectangleLinesEx(rect, 2, border);
-        Raylib.DrawText(text, (int)rect.X, (int)rect.Y, fontSize, Color.Black);
+        Raylib.DrawText(text, (int)rect.X, (int)rect.Y, style.fontSize, Color.Black);
     }
 }
 
 class Label : GUI
 {
     string label;
-    int fontSize;
-    Color color;
 
-    public Label(Window window, Rectangle rect, string label, int fontSize, Color color) : base(window, rect, false)
+    public Label(string label) : base(false)
     {
         this.label = label;
-        this.fontSize = fontSize;
-        this.color = color;
     }
 
-    public override void Update()
+    public override int Height(Window window) => 0;
+
+    public override void Update(Window window)
     {
-        Raylib.DrawText(label, (int)rect.X, (int)rect.Y, fontSize, color);
+        var style = Program.style;
+        Raylib.DrawText(label, style.border, window.y, style.fontSize, style.labelColor);
+    }
+}
+
+class Header : GUI
+{
+    string header;
+
+    public Header(string header) : base(false)
+    {
+        this.header = header;
+    }
+
+    public override int Height(Window window) => Program.style.headerFontSize + Program.style.spacing;
+
+    public override void Update(Window window)
+    {
+        var style = Program.style;
+        var length = Raylib.MeasureText(header, style.headerFontSize);
+        Raylib.DrawText(
+            header,
+            (int)(window.rect.Width / 2 + window.rect.X - length / 2f),
+            (int)window.y,
+            style.headerFontSize,
+            style.headerColor);
     }
 }
 
 class Button : GUI
 {
     string text;
-    int fontSize;
     Action action;
 
-    public Button(Window window, Rectangle rect, string text, int fontSize, Action action) : base(window, rect, true)
+    public Button(string text, Action action) : base(true)
     {
         this.text = text;
-        this.fontSize = fontSize;
         this.action = action;
     }
 
-    public override void Update()
+    public override int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+
+    public override void Update(Window window)
     {
-        if (Active)
+        var style = Program.style;
+        var rect = new Rectangle(window.rect.X + style.border, window.y, window.rect.Width - style.border * 2, style.fontSize);
+        var active = window.IsActive(this);
+        if (active)
         {
             Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, Color.Red);
         }
-        Raylib.DrawText(text, (int)rect.X, (int)rect.Y, fontSize, Color.Black);
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && Active)
+        Raylib.DrawText(text, (int)rect.X, (int)rect.Y, style.fontSize, Color.Black);
+        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && active)
         {
             action();
         }
@@ -241,23 +245,28 @@ class BoolBox : GUI
 {
     bool value;
 
-    public BoolBox(Window window, Rectangle rect, bool value) : base(window, rect, true)
+    public BoolBox(bool value) : base(true)
     {
         this.value = value;
     }
 
-    public override void Update()
+    public override int Height(Window window) => Program.style.fontSize + Program.style.spacing;
+
+    public override void Update(Window window)
     {
+        var style = Program.style;
+        var active = window.IsActive(this);
         Color color = Color.Black;
-        if (Active)
+        if (active)
             color = Color.Red;
 
+        var rect = new Rectangle(window.rect.X + window.rect.Width * style.labelFraction, window.y, style.fontSize, style.fontSize);
         if (value)
             Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, color);
         else
             Raylib.DrawRectangleLinesEx(rect, 4, color);
 
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && Active)
+        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && active)
             value = !value;
     }
 }

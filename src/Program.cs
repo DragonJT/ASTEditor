@@ -1,6 +1,4 @@
 ﻿
-using System.Numerics;
-using System.Reflection;
 using Raylib_cs;
 
 static class RaylibHelper
@@ -16,433 +14,156 @@ static class RaylibHelper
     }
 }
 
-interface IDisplay
+abstract class Node
 {
-    void Display(NodeTree displayNodeTree, Node node);
-}
-
-class DisplayParameters(Color punctuationColor) : IDisplay
-{
-    public void Display(NodeTree displayNodeTree, Node node)
-    {
-        displayNodeTree.DrawText("(", punctuationColor);
-        for (var i = 0; i < node.children.Count; i++)
-        {
-            displayNodeTree.Draw(node.children[i]);
-            if (i < node.children.Count - 1)
-            {
-                displayNodeTree.DrawText(",", punctuationColor);
-                displayNodeTree.DrawSpace();
-            }
-        }
-        displayNodeTree.DrawText(")", punctuationColor);
-    }
-}
-
-class DisplayChildX(int x) : IDisplay
-{
-    public void Display(NodeTree displayNodeTree, Node node)
-    {
-        displayNodeTree.Draw(node.children[x]);
-    }
-}
-
-class DisplayValue(Color color) : IDisplay
-{
-    public void Display(NodeTree displayNodeTree, Node node)
-    {
-        displayNodeTree.DrawText(node.value!, color);
-    }
-}
-
-class DisplayNewLine : IDisplay
-{
-    public void Display(NodeTree displayNodeTree, Node node)
-    {
-        displayNodeTree.NewLine();
-    }
-}
-
-class DisplaySpace : IDisplay
-{
-    public void Display(NodeTree displayNodeTree, Node node)
-    {
-        displayNodeTree.DrawSpace();
-    }
-}
-
-class DisplayType(Color color) : IDisplay
-{
-    public void Display(NodeTree displayNodeTree, Node node)
-    {
-        displayNodeTree.DrawText(node.nodeType.name, color);
-    }
-}
-
-class DisplayChildren : IDisplay
-{
-    public void Display(NodeTree displayNodeTree, Node node)
-    {
-        displayNodeTree.DrawChildren(node);
-    }
-}
-
-class DisplayChildrenOfChild(int childID) : IDisplay
-{
-    public void Display(NodeTree displayNodeTree, Node node)
-    {
-        if(childID < node.children.Count)
-            displayNodeTree.DrawChildren(node.children[childID]);
-    }
-}
-
-class DefaultTypes
-{
-    public NodeType[] types;
-    public int id;
-
-    public DefaultTypes(NodeType[] types, int id)
-    {
-        this.types = types;
-        this.id = id;
-    }
-}
-
-class NodeType
-{
-    public string name = "";
-    public bool hasValue = false;
-    public DefaultTypes? defaultTypes;
-    public List<NodeType> subTypes = [];
-    public List<IDisplay> display = [];
-
-    public NodeType() { }
-
-    public NodeType(string name, bool hasValue)
-    {
-        this.name = name;
-        this.hasValue = hasValue;
-    }
-
-    public bool IsNewLineInTree => display.OfType<DisplayNewLine>().Any();
-}
-
-class Node
-{
-    public NodeType nodeType;
     public string value = "";
     public Node? parent = null;
     public List<Node> children = [];
 
-    public Node(Node? parent, NodeType nodeType)
+    public Node(Node? parent)
     {
         this.parent = parent;
-        this.nodeType = nodeType;
     }
+
+    public abstract void Draw(Window window, NodeTree nodeTree);
+    public abstract void Input(Window window, NodeTree nodeTree);
 }
 
 class NodeTree : GUI
 {
     Node root;
-    Node selected;
+    public Node selected;
     int x;
     int y;
     int depth;
-    int spaceSize;
-    int fontSize;
 
-    public NodeTree(Window window, Rectangle rect, Node root, int fontSize) : base(window, rect, true)
+    public NodeTree(Node root) : base(true)
     {
         this.root = root;
         selected = root;
-        this.fontSize = fontSize;
     }
-    
+
     public void DrawText(string text, Color color)
     {
-        Raylib.DrawText(text, x + 2, y, fontSize, color);
-        x += Raylib.MeasureText(text, fontSize) + 4;
+        Raylib.DrawText(text, x + 2, y, Program.style.fontSize, color);
+        x += Raylib.MeasureText(text, Program.style.fontSize) + 4;
     }
 
     public void DrawSpace()
     {
-        x += spaceSize;
+        x += Program.style.spaceSize;
     }
 
     public void NewLine()
     {
-        y += fontSize;
+        y += Program.style.fontSize;
         x = 0;
     }
 
-    public void DrawChildren(Node node)
+    public void DrawChildren(Window window, List<Node> children)
     {
         depth++;
-        foreach (var c in node.children)
+        foreach (var c in children)
         {
-            x += spaceSize * 4 * depth;
-            Draw(c);
+            x = Program.style.spaceSize * depth * 4 + Program.style.border;
+            c.Draw(window, this);
         }
-
         depth--;
     }
 
-    static Action CreateForm(Window parent, Vector2 pos, int fontSize, Node node, NodeType nodeType)
+    public void DrawSelected(Window window, Node node)
     {
-        if (nodeType.hasValue)
+        if (node == selected)
         {
-            return () =>
-            {
-                var rect = new Rectangle(pos.X, pos.Y, 600, fontSize);
-                var form = new Window(parent, rect.Expand(50), fontSize);
-                form.AddHeader(nodeType.name, 1.3f);
-                form.AddLabel("Name");
-
-                var newNode = new Node(node, nodeType);
-                node.children.Add(newNode);
-                if (nodeType.defaultTypes != null)
-                {
-                    foreach (var n in nodeType.defaultTypes.types)
-                    {
-                        newNode.children.Add(new Node(newNode, n));
-                    }
-                }
-                
-                var textBox = form.AddTextBox(new ValueGetSetter(newNode, "value"));
-            };
-        }
-        else
-        {
-            return () =>
-            {
-                var newNode = new Node(node, nodeType);
-                node.children.Add(newNode);
-                parent.child = null;
-            };
+            Raylib.DrawRectangle((int)window.rect.X, y, (int)window.rect.Width, Program.style.fontSize, Color.RayWhite);
+            Raylib.DrawRectangleLines((int)window.rect.X, y, (int)window.rect.Width, Program.style.fontSize, Color.Black);
         }
     }
 
-    static void CreateAddMenuItems(Window parent, Window menu, Vector2 pos, int fontSize, Node node)
+    public override int Height(Window window)
     {
-        foreach(var t in node.nodeType.subTypes)
-        {
-            menu.AddButton($"Add {t.name}", CreateForm(parent, pos, fontSize, node, t));
-        }
+        return (int)(window.rect.Height - window.y - Program.style.border);
     }
 
-    public void Draw(Node node)
+    public override void Update(Window window)
     {
-        var startY = y;
-        if(selected == node)
+        y = window.y;
+        x = (int)(window.rect.X + Program.style.border);
+        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && window.IsActive(this))
         {
-            Raylib.DrawRectangle(0, y, Raylib.GetScreenWidth(), fontSize, new Color(200,200,200));
+            selected.Input(window, this);
         }
-        foreach (var display in node.nodeType.display)
-        {
-            display.Display(this, node);
-        }
-        var m = new Vector2(100, startY + fontSize);
-        if (Active && selected == node && RaylibHelper.IsKeyPressed(KeyboardKey.Enter))
-        {
-            var menu = new Window(window, new Rectangle(m, World.menuWidth, 0), fontSize);
-            if (node.nodeType.defaultTypes == null)
-            {
-                CreateAddMenuItems(window, menu, m, fontSize, node);
-            }
-            else if (node.nodeType.defaultTypes.id >= 0)
-            {
-                CreateAddMenuItems(window, menu, m, fontSize, node.children[node.nodeType.defaultTypes.id]);
-            }
-            if (node.nodeType.hasValue)
-            {
-                menu.AddButton("Rename", () =>
-                {
-                    var rect = new Rectangle(m.X, m.Y, 1000, 300);
-                    var form = new Window(window, rect, fontSize);
-                    form.AddHeader("Rename", 1.3f);
-                    form.AddLabel("New name");
-                    var textBox = form.AddTextBox(new ValueGetSetter(node, "value"));
-                });
-            }
-            if (node.parent != null)
-            {
-                menu.AddButton("Delete", () =>
-                {
-                    node.parent.children.Remove(node);
-                    menu.Delete();
-                });
-            }
-        }
-    }
-
-    static void GetDescendingNodes(Node node, List<Node> nodes)
-    {
-        nodes.Add(node);
-        foreach(var c in node.children)
-        {
-            GetDescendingNodes(c, nodes);
-        }
-    }
-
-    static List<Node> GetDescendingNodes(Node root)
-    {
-        var nodes = new List<Node>();
-        GetDescendingNodes(root, nodes);
-        return nodes;
-    }
-
-    public override void Update()
-    {
-        x = (int)rect.X;
-        y = (int)rect.Y;
-        depth = 0;
-        spaceSize = Raylib.MeasureText(" ", fontSize);
-        Draw(root);
-        if (Active)
-        {
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
-            {
-                var nodes = GetDescendingNodes(root).Where(n => n.nodeType.IsNewLineInTree).ToList();
-                var id = nodes.IndexOf(selected);
-                id--;
-                if (id < 0)
-                {
-                    id = nodes.Count - 1;
-                }
-                selected = nodes[id];
-            }
-            if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
-            {
-                var nodes = GetDescendingNodes(root).Where(n => n.nodeType.IsNewLineInTree).ToList();
-                var id = nodes.IndexOf(selected);
-                id++;
-                if (id >= nodes.Count)
-                {
-                    id = 0;
-                }
-                selected = nodes[id];
-            }
-        }
-        Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
+        root.Draw(window, this);
     }
 }
 
-class ValueGetSetter
+class Module : Node
 {
-    object obj;
-    FieldInfo fieldInfo;
+    public TextBox name;
 
-    public ValueGetSetter(object obj, string fieldName)
+    public Module(Node parent) : base(parent)
     {
-        this.obj = obj;
-        fieldInfo = obj.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) 
-            ?? throw new Exception(obj+"_"+fieldName);
+        name = new TextBox();
     }
 
-    public string GetString()
+    public override void Draw(Window window, NodeTree nodeTree)
     {
-        return (string)fieldInfo.GetValue(obj)!;
+        nodeTree.DrawSelected(window, this);
+        nodeTree.DrawText("module", Color.SkyBlue);
+        nodeTree.DrawSpace();
+        nodeTree.DrawText(name.text, Color.DarkGreen);
+        nodeTree.NewLine();
+        nodeTree.DrawChildren(window, children);
     }
 
-    public void SetString(string value)
+    public static void CreateModule(Window menu, Node node, NodeTree nodeTree, Window window)
     {
-        fieldInfo.SetValue(obj, value);
+        menu.Add(new Button("module", () =>
+        {
+            var m = new Module(node);
+            node.children.Add(m);
+            nodeTree.selected = m;
+            m.Input(window, nodeTree);
+
+            var form = new Window(window, new Rectangle(100, 100, 400, 400));
+            form.Add(m.name);
+            m.name.onEnter = () =>
+            {
+                form.Delete();
+            };
+        }));
+    }
+
+    public override void Input(Window window, NodeTree nodeTree)
+    {
+        var menu = new Window(window, new Rectangle(100, 100, 400, 400));
+        CreateModule(menu, this, nodeTree, window);
     }
 }
 
-class World
+class Root : Node
 {
-    public const int menuWidth = 400;
-    public const int fontSize = 50;
-    public List<NodeType> nodeTypes = [];
-    public Node root;
+    public Root() : base(null) { }
 
-    public void Edit(Window parent)
+    public override void Draw(Window window, NodeTree nodeTree)
     {
-        /*public string name;
-        public bool hasValue;
-        public DefaultTypes? defaultTypes;
-        public List<NodeType> subTypes = [];
-        public List<IDisplay> display = [];*/
-
-        var form = new Window(parent, new Rectangle(0, 0, 1000, 800), fontSize);
-        var nodeType = new NodeType();
-        nodeTypes.Add(nodeType);
-        form.AddHeader("Edit", 1.3f);
-        form.AddLabel("Name");
-        form.AddTextBox(new ValueGetSetter(nodeType, "name"));
-        form.AddLabel("HasValue");
-        form.AddBoolBox(false);
-        var y = form.Y;
-        form.AddButton("Add", () =>
-        {
-            var menu = new Window(form, new Rectangle(200, y, menuWidth, 0), fontSize);
-            menu.AddButton("[new]", () => Edit(parent));
-            foreach (var t in nodeTypes)
-            {
-                menu.AddButton(t.name, () => { });
-            }
-        });
+        nodeTree.DrawSelected(window, this);
+        nodeTree.DrawText("root", Color.SkyBlue);
+        nodeTree.NewLine();
+        nodeTree.DrawChildren(window, children);
     }
-
-    public World()
+    
+    public override void Input(Window window, NodeTree nodeTree)
     {
-        var exprType = new NodeType("expression", false);
-        var typeType = new NodeType("type", true);
-        var nameType = new NodeType("name", true);
-        var paramsType = new NodeType("parameters", false);
-        var bodyType = new NodeType("body", false);
-        var funcType = new NodeType("function", true);
-        var classType = new NodeType("class", true);
-        var moduleType = new NodeType("module", true);
-        var rootType = new NodeType("root", false);
-
-        rootType.subTypes.Add(moduleType);
-        moduleType.subTypes.AddRange([classType, funcType]);
-        classType.subTypes.AddRange([funcType]);
-        bodyType.subTypes.AddRange([exprType]);
-
-        funcType.defaultTypes = new DefaultTypes([typeType, paramsType, bodyType], 2);
-        paramsType.defaultTypes = new DefaultTypes([typeType, nameType], -1);
-        typeType.display.Add(new DisplayValue(Color.Blue));
-
-        paramsType.display.Add(new DisplayParameters(Color.DarkGray));
-
-        exprType.display.AddRange([new DisplayType(Color.Magenta), new DisplayNewLine()]);
-
-        rootType.display.AddRange([
-            new DisplayType(Color.SkyBlue),
-            new DisplayNewLine(),
-            new DisplayChildren()]);
-
-        moduleType.display.AddRange([
-            new DisplayType(Color.SkyBlue),
-            new DisplaySpace(),
-            new DisplayValue(Color.DarkGreen),
-            new DisplayNewLine(),
-            new DisplayChildren()]);
-
-        classType.display.AddRange([
-            new DisplayType(Color.SkyBlue),
-            new DisplaySpace(),
-            new DisplayValue(Color.Blue),
-            new DisplayNewLine(),
-            new DisplayChildren()]);
-
-        funcType.display.AddRange([
-            new DisplayChildX(0),
-            new DisplaySpace(),
-            new DisplayValue(Color.DarkGreen),
-            new DisplayChildX(1),
-            new DisplayNewLine(),
-            new DisplayChildrenOfChild(2),
-        ]);
-        root = new Node(null, rootType);
+        var menu = new Window(window, new Rectangle(100, 100, 400, 400));
+        Module.CreateModule(menu, this, nodeTree, window);
     }
 }
 
 class Program
 {
+    public static Style style = new ();
+
     static void Main()
     {
         Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
@@ -450,19 +171,16 @@ class Program
         Raylib.MaximizeWindow();
         Raylib.SetExitKey(KeyboardKey.Null);
 
-        var form = new Window(null, new Rectangle(0, 0, 1000, 800), World.fontSize);
-        var world = new World();
-        form.AddNodeTree(world.root);
+        var root = new Root();
+
+        var form = new Window(null, new Rectangle(0, 0, 1000, 800));
+        form.Add(new NodeTree(root));
 
         while (!Raylib.WindowShouldClose())
         {
             Raylib.BeginDrawing();
             Raylib.ClearBackground(Color.White);
 
-            if(form.Active && RaylibHelper.IsKeyPressed(KeyboardKey.E))
-            {
-                world.Edit(form);
-            }
             form.Update();
 
             Raylib.EndDrawing();
