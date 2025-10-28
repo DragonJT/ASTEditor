@@ -1,4 +1,5 @@
 ﻿
+using System.ComponentModel;
 using Raylib_cs;
 
 static class RaylibHelper
@@ -27,6 +28,13 @@ abstract class Node
 
     public abstract void Draw(Window window, NodeTree nodeTree);
     public abstract void Input(Window window, NodeTree nodeTree);
+
+    public Node[] DescendingNodes()
+    {
+        return [this, .. children.SelectMany(c => c.DescendingNodes())];
+    }
+
+    public Node Root => parent != null ? parent.Root : this;
 }
 
 class NodeTree : GUI
@@ -85,11 +93,31 @@ class NodeTree : GUI
         return (int)(window.rect.Height - window.y - Program.style.border);
     }
 
+    void MoveSelected(int delta)
+    {
+        var nodes = root.DescendingNodes();
+        if(nodes.Length == 0) return;
+        var index = Array.IndexOf(nodes, selected);
+        index+=delta;
+        if (index < 0) index = nodes.Length - 1;
+        else if (index >= nodes.Length) index = 0;
+        selected = nodes[index];
+    }
+
     public override void Update(Window window)
     {
+        var active = window.IsActive(this);
         y = window.y;
         x = (int)(window.rect.X + Program.style.border);
-        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && window.IsActive(this))
+        if (RaylibHelper.IsKeyPressed(KeyboardKey.Up))
+        {
+            MoveSelected(-1);
+        }
+        if (RaylibHelper.IsKeyPressed(KeyboardKey.Down))
+        {
+            MoveSelected(1);
+        }
+        if (RaylibHelper.IsKeyPressed(KeyboardKey.Enter) && active)
         {
             selected.Input(window, this);
         }
@@ -97,68 +125,6 @@ class NodeTree : GUI
     }
 }
 
-class Module : Node
-{
-    public TextBox name;
-
-    public Module(Node parent) : base(parent)
-    {
-        name = new TextBox();
-    }
-
-    public override void Draw(Window window, NodeTree nodeTree)
-    {
-        nodeTree.DrawSelected(window, this);
-        nodeTree.DrawText("module", Color.SkyBlue);
-        nodeTree.DrawSpace();
-        nodeTree.DrawText(name.text, Color.DarkGreen);
-        nodeTree.NewLine();
-        nodeTree.DrawChildren(window, children);
-    }
-
-    public static void CreateModule(Window menu, Node node, NodeTree nodeTree, Window window)
-    {
-        menu.Add(new Button("module", () =>
-        {
-            var m = new Module(node);
-            node.children.Add(m);
-            nodeTree.selected = m;
-            m.Input(window, nodeTree);
-
-            var form = new Window(window, new Rectangle(100, 100, 400, 400));
-            form.Add(m.name);
-            m.name.onEnter = () =>
-            {
-                form.Delete();
-            };
-        }));
-    }
-
-    public override void Input(Window window, NodeTree nodeTree)
-    {
-        var menu = new Window(window, new Rectangle(100, 100, 400, 400));
-        CreateModule(menu, this, nodeTree, window);
-    }
-}
-
-class Root : Node
-{
-    public Root() : base(null) { }
-
-    public override void Draw(Window window, NodeTree nodeTree)
-    {
-        nodeTree.DrawSelected(window, this);
-        nodeTree.DrawText("root", Color.SkyBlue);
-        nodeTree.NewLine();
-        nodeTree.DrawChildren(window, children);
-    }
-    
-    public override void Input(Window window, NodeTree nodeTree)
-    {
-        var menu = new Window(window, new Rectangle(100, 100, 400, 400));
-        Module.CreateModule(menu, this, nodeTree, window);
-    }
-}
 
 class Program
 {
