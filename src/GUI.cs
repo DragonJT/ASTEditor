@@ -20,7 +20,7 @@ class Window
     Window? child;
     public Rectangle rect;
     public GUI? selected;
-    public bool startFrame = true;
+    public bool firstFrame = true;
     GUI[] guis;
     GUI[] selectableGUIs;
     public int y;
@@ -111,11 +111,11 @@ class Window
             y += g.Height(this);
         }
         Raylib.DrawRectangleLinesEx(rect, 2, Color.Black);
-        startFrame = false;
+        firstFrame = false;
         child?.Update();
     }
 
-    public bool Active => child == null && !startFrame;
+    public bool Active => child == null && !firstFrame;
 
     public bool IsActive(GUI gui)
     {
@@ -228,6 +228,7 @@ class SearchBox : GUI
     string text;
     Button[] searches;
     Window searchWindow;
+    bool attachChild = true;
 
     public SearchBox(string text, Button[] searches)
     {
@@ -263,12 +264,23 @@ class SearchBox : GUI
         }
         if (startText != text)
         {
+            attachChild = true;
             UpdateCurrentSearches();
         }
     }
 
     public void Update(Window window)
     {
+        if (window.Active)
+        {
+            OnInput();
+        }
+        if (attachChild)
+        {
+            window.AttachChild(searchWindow);
+            attachChild = false;
+        }
+        
         var style = Program.style;
         Color border = window.selected == this ? Color.Red : Color.Black;
         var r = window.rect;
@@ -279,7 +291,7 @@ class SearchBox : GUI
 
         var searchRect = new Rectangle(r.X + r.Width * style.labelFraction, window.y + style.fontSize, 400, 0);
         searchWindow.rect = searchRect;
-        window.AttachChild(searchWindow);
+        
     }
 }
 
