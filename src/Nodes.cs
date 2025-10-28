@@ -1,17 +1,68 @@
 using Raylib_cs;
 
-class Number(Node parent, string value) : Node(parent)
+class BinaryExpr(Node parent, string op) : Node(parent)
 {
-    public string value = value;
+    public override bool Selectable => false;
 
     public override void Draw(Window window, NodeTree nodeTree)
     {
-        nodeTree.DrawText(value, Color.Magenta);
+        nodeTree.DrawSpace();
+        nodeTree.DrawText(op, Color.DarkGray);
+        nodeTree.DrawSpace();
+        if(children.Count == 1)
+        {
+            children[0].Draw(window, nodeTree);
+        }
     }
 
     public override void Input(Window window, NodeTree nodeTree, string text)
     {
-        
+    }
+
+    public static void Create(string text, Window parentWindow, Node parentNode)
+    {
+        var searchBox = new SearchBox(text);
+        var form = new Window(parentWindow, new Rectangle(100, 100, 400, 400), [searchBox]);
+        string[] operators = ["+", "-", "*", "/"];
+        foreach(var o in operators)
+        {
+            searchBox.Add(o, () =>
+            {
+                var binaryExpr = new BinaryExpr(parentNode, o);
+                form.Delete();
+                NumberExpr.Create("", parentWindow, binaryExpr);
+            });
+        }
+    }
+}
+
+class NumberExpr(Node parent, string value) : Node(parent)
+{
+    public override bool Selectable => false;
+
+    public override void Draw(Window window, NodeTree nodeTree)
+    {
+        nodeTree.DrawText(value, Color.Magenta);
+        if(children.Count == 1)
+        {
+            children[0].Draw(window, nodeTree);
+        }
+    }
+
+    public override void Input(Window window, NodeTree nodeTree, string text)
+    {
+    }
+
+    public static void Create(string text, Window parentWindow, Node parentNode)
+    {
+        var sbox = new SearchBox(text);
+        var form = new Window(parentWindow, new Rectangle(100, 100, 400, 400), [sbox]);
+        sbox.onNumberInput = n =>
+        {
+            var numberExpr = new NumberExpr(parentNode, n);
+            form.Delete();
+            BinaryExpr.Create("", parentWindow, numberExpr);
+        };
     }
 }
 
@@ -19,13 +70,15 @@ class ImplicitVariableDecl(Node parent) : Node(parent)
 {
     public TextBox name = new();
 
+    public override bool Selectable => true;
+
     public override void Draw(Window window, NodeTree nodeTree)
     {
         nodeTree.DrawSelected(window, this);
         nodeTree.DrawText("var", Color.SkyBlue);
         nodeTree.DrawSpace();
         nodeTree.DrawText(name.text, Color.Lime);
-        if(children.Count == 1)
+        if (children.Count == 1)
         {
             nodeTree.DrawSpace();
             nodeTree.DrawText("=", Color.DarkGray);
@@ -35,23 +88,17 @@ class ImplicitVariableDecl(Node parent) : Node(parent)
         nodeTree.NewLine();
     }
 
-    public static void Create(SearchBox searchBox, Node node, NodeTree nodeTree, Window window)
+    public static void Create(SearchBox searchBox, Node parentNode, NodeTree nodeTree, Window parentWindow)
     {
         searchBox.Add("var", () =>
         {
-            var v = new ImplicitVariableDecl(node);
+            var v = new ImplicitVariableDecl(parentNode);
             nodeTree.selected = v;
+            var form = new Window(parentWindow, new Rectangle(100, 100, 400, 400), [v.name]);
 
-            var form = new Window(window, new Rectangle(100, 100, 400, 400), [v.name]);
             v.name.onEnter = () =>
             {
-                var sbox = new SearchBox("");
-                var form2 = new Window(window, new Rectangle(100, 100, 400, 400), [sbox]);
-                sbox.onNumberInput = n =>
-                {
-                    new Number(v, n);
-                    form2.Delete();
-                };
+                NumberExpr.Create("", parentWindow, v);
             };
         });
     }
@@ -66,6 +113,8 @@ class Function(IType returnType, Node parent) : Node(parent)
 {
     public IType returnType = returnType;
     public TextBox name = new();
+
+    public override bool Selectable => true;
 
     public override void Draw(Window window, NodeTree nodeTree)
     {
@@ -111,6 +160,8 @@ class Class(Node parent) : Node(parent), IType
     public TextBox name = new();
     public string Name => name.text;
 
+    public override bool Selectable => true;
+
     public override void Draw(Window window, NodeTree nodeTree)
     {
         nodeTree.DrawSelected(window, this);
@@ -148,6 +199,8 @@ class Class(Node parent) : Node(parent), IType
 class Module(Node parent) : Node(parent)
 {
     public TextBox name = new();
+
+    public override bool Selectable => true;
 
     public override void Draw(Window window, NodeTree nodeTree)
     {
@@ -188,6 +241,8 @@ class Module(Node parent) : Node(parent)
 class Root : Node
 {
     public Root() : base(null) { }
+
+    public override bool Selectable => true;
 
     public override void Draw(Window window, NodeTree nodeTree)
     {

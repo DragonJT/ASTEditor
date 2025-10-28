@@ -39,6 +39,7 @@ abstract class Node
         parent?.children.Add(this);
     }
 
+    public abstract bool Selectable{ get; }
     public abstract void Draw(Window window, NodeTree nodeTree);
     public abstract void Input(Window window, NodeTree nodeTree, string text);
 
@@ -110,7 +111,7 @@ class NodeTree : GUI
 
     void MoveSelected(int delta)
     {
-        var nodes = root.DescendingNodes();
+        var nodes = root.DescendingNodes().Where(n=>n.Selectable).ToArray();
         if(nodes.Length == 0) return;
         var index = Array.IndexOf(nodes, selected);
         index+=delta;
