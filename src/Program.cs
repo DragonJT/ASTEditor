@@ -30,13 +30,13 @@ static class RaylibHelper
 
 abstract class Node
 {
-    public string value = "";
     public Node? parent = null;
     public List<Node> children = [];
 
     public Node(Node? parent)
     {
         this.parent = parent;
+        parent?.children.Add(this);
     }
 
     public abstract void Draw(Window window, NodeTree nodeTree);

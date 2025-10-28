@@ -47,7 +47,6 @@ class Window
         if (!selectableGUIs.Contains(selected))
         {
             SetDefaultSelected();
-            selected = selectableGUIs[0];
         }
     }
 
@@ -226,36 +225,58 @@ class Header(string header) : GUI
 class SearchBox : GUI
 {
     string text;
-    Button[] searches;
+    List<Button> searches = [];
     Window searchWindow;
     bool attachChild = true;
+    bool dirty = false;
+    public Action<string>? onNumberInput;
 
-    public SearchBox(string text, Button[] searches)
+    public void Add(string search, Action action)
+    {
+        searches.Add(new Button(search, action));
+        dirty = true;
+    }
+
+    public SearchBox(string text)
     {
         this.text = text;
-        this.searches = searches;
         searchWindow = new Window(null, new Rectangle(), []);
         searchWindow.AdditionalInput = OnInput;
-        UpdateCurrentSearches();
     }
 
     public GUI[] Selectables => [this];
 
     public int Height(Window window) => Program.style.fontSize + Program.style.spacing;
 
+    bool IsNumberInput()
+    {
+        return onNumberInput != null && text.Length > 0 && (char.IsDigit(text[0]) || text[0] == '.');
+    }
+
     void UpdateCurrentSearches()
     {
-        var currentSearches = searches.Where(s => s.text.StartsWith(text)).ToArray();
-        while (currentSearches.Length == 0 && text.Length > 0)
+        if (IsNumberInput())
         {
-            text = text[..^1];
-            currentSearches = searches.Where(s => s.text.StartsWith(text)).ToArray();
+            searchWindow.UpdateGUIs([]);
         }
-        searchWindow.UpdateGUIs(currentSearches);
+        else
+        {
+            var currentSearches = searches.Where(s => s.text.StartsWith(text)).ToArray();
+            while (currentSearches.Length == 0 && text.Length > 0)
+            {
+                text = text[..^1];
+                currentSearches = [.. searches.Where(s => s.text.StartsWith(text))];
+            }
+            searchWindow.UpdateGUIs(currentSearches);
+        }
     }
 
     public void OnInput()
     {
+        if (Raylib.IsKeyPressed(KeyboardKey.Enter) && IsNumberInput())
+        {
+            onNumberInput!(text);
+        }
         var startText = text;
         text += RaylibHelper.GetText();
         if (RaylibHelper.IsKeyPressed(KeyboardKey.Backspace) && text.Length > 0)
@@ -271,6 +292,11 @@ class SearchBox : GUI
 
     public void Update(Window window)
     {
+        if (dirty)
+        {
+            UpdateCurrentSearches();
+            dirty = false;
+        }
         if (window.Active)
         {
             OnInput();
